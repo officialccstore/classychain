@@ -56,9 +56,11 @@ export default function ProfilePage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [savingAddress, setSavingAddress] = useState(false)
 
-  const authHeaders = useMemo(() => (
-    token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
-  ), [token])
+  const authHeaders = useMemo(() => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+    return headers
+  }, [token])
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token')

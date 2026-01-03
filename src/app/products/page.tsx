@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ShoppingCart, Star, ChevronDown, X } from 'lucide-react'
@@ -25,7 +25,7 @@ interface Product {
   subcategory?: { id: string; name: string }
 }
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const searchParams = useSearchParams()
   
   // Lazy initialize selectedCategories from URL params
@@ -418,5 +418,13 @@ export default function ProductsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-16">Loading products...</div>}>
+      <ProductsPageContent />
+    </Suspense>
   )
 }

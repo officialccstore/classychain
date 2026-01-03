@@ -138,7 +138,7 @@ export default function ProductDetailPage() {
                 ₹{product.price.toFixed(2)}
               </span>
               <p className="text-green-600 font-medium mt-2">
-                {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+                {(product.stock ?? 0) > 0 ? `${product.stock ?? 0} in stock` : 'Out of stock'}
               </p>
             </div>
 
