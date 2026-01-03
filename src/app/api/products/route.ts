@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import prisma from '@/lib/prisma'
 
 export async function GET(request: Request) {
   try {
@@ -10,7 +8,7 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = 12
 
-    const where = category ? { category: { equals: category, mode: 'insensitive' } } : {}
+    const where: any = category ? { category: { equals: category, mode: 'insensitive' } } : {}
 
     const products = await prisma.product.findMany({
       where,

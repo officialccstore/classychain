@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
 import { getTokenFromReq, verifyToken } from '@/lib/auth'
-
-const prisma = new PrismaClient()
+import prisma from '@/lib/prisma'
 
 function isAdminFromReq(req: any) {
   const token = getTokenFromReq(req)
@@ -11,10 +9,8 @@ function isAdminFromReq(req: any) {
   return payload && payload.role === 'admin'
 }
 
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, ctx: any) {
+  const { params } = ctx
   try {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -37,10 +33,8 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: Request, ctx: any) {
+  const { params } = ctx
   try {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

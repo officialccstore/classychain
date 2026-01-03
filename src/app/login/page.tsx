@@ -1,15 +1,16 @@
-'use client'
+"use client"
+
+export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { showToast } from '@/components/Toast'
 import { LogoWithText } from '@/components/Logo'
 
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -58,8 +59,9 @@ export default function LoginPage() {
         }
       }
 
-      // Check for redirect param
-      const redirect = searchParams.get('redirect') || (data.user.role === 'admin' ? '/admin' : '/products')
+      // Check for redirect param (use window.location to avoid SSR/useSearchParams constraints)
+      const urlParams = new URL(window.location.href).searchParams
+      const redirect = urlParams.get('redirect') || (data.user.role === 'admin' ? '/admin' : '/products')
       window.location.href = redirect
     } catch (error) {
       setError('An error occurred. Please try again.')
