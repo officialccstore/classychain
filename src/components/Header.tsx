@@ -38,20 +38,45 @@ export default function Header() {
   useEffect(() => {
     const fetchCartCount = async () => {
       try {
-        const response = await fetch('/api/cart')
-        const data = await response.json()
-        const count = Array.isArray(data) ? data.length : 0
-        setCartCount(count)
+        // If user is logged in, prefer server-side cart
+        if (user) {
+          const response = await fetch('/api/cart')
+          const data = await response.json()
+          const count = Array.isArray(data) ? data.length : 0
+          setCartCount(count)
+          return
+        }
+
+        // If not logged in, read pending cart from localStorage
+        const pending = localStorage.getItem('pendingCart')
+        if (pending) {
+          const parsed = JSON.parse(pending)
+          setCartCount(Array.isArray(parsed) ? parsed.length : 0)
+        } else {
+          setCartCount(0)
+        }
       } catch (error) {
         console.error('Failed to fetch cart count:', error)
       }
     }
 
+    fetchCartCount()
+
+    // Refresh cart count every 30 seconds when logged in
+    let interval: ReturnType<typeof setInterval> | undefined
     if (user) {
-      fetchCartCount()
-      // Refresh cart count every 30 seconds
-      const interval = setInterval(fetchCartCount, 30000)
-      return () => clearInterval(interval)
+      interval = setInterval(fetchCartCount, 30000)
+    }
+
+    const onCartUpdated = () => fetchCartCount()
+    // Listen for custom cart update events and storage changes
+    window.addEventListener('cartUpdated', onCartUpdated)
+    window.addEventListener('storage', onCartUpdated)
+
+    return () => {
+      if (interval) clearInterval(interval)
+      window.removeEventListener('cartUpdated', onCartUpdated)
+      window.removeEventListener('storage', onCartUpdated)
     }
   }, [user])
 
@@ -85,67 +110,62 @@ export default function Header() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
+          <Link href="/wishlist" className="text-gray-600 hover:text-primary flex-shrink-0">
+            <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
+          </Link>
+          <Link href="/cart" className="text-gray-600 hover:text-primary relative flex-shrink-0">
+            <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
+            {cartCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-accent text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                {cartCount}
+              </span>
+            )}
+          </Link>
+
           {!isLoading && user ? (
-            <>
-              {user.role !== 'admin' && (
-                <>
-                  <Link href="/wishlist" className="text-gray-600 hover:text-primary flex-shrink-0">
-                    <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </Link>
-                  <Link href="/cart" className="text-gray-600 hover:text-primary relative flex-shrink-0">
-                    <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
-                    {cartCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-accent text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-                        {cartCount}
-                      </span>
-                    )}
-                  </Link>
-                </>
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-1 sm:gap-2 text-gray-600 hover:text-primary flex-shrink-0"
+              >
+                <User className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="text-xs sm:text-sm font-medium hidden sm:inline max-w-xs truncate">{user.name}</span>
+              </button>
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-10">
+                  <p className="px-4 py-2 text-xs sm:text-sm text-gray-600 border-b truncate">{user.email}</p>
+                  {user.role === 'admin' ? (
+                    <>
+                      <Link href="/admin" className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 text-sm">
+                        <Settings className="w-4 h-4 flex-shrink-0" />
+                        Admin Panel
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 text-sm"
+                      >
+                        <LogOut className="w-4 h-4 flex-shrink-0" />
+                        Logout
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/profile" className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 text-sm">
+                        <User className="w-4 h-4 flex-shrink-0" />
+                        My Profile
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 text-sm"
+                      >
+                        <LogOut className="w-4 h-4 flex-shrink-0" />
+                        Logout
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-1 sm:gap-2 text-gray-600 hover:text-primary flex-shrink-0"
-                >
-                  <User className="w-5 h-5 sm:w-6 sm:h-6" />
-                  <span className="text-xs sm:text-sm font-medium hidden sm:inline max-w-xs truncate">{user.name}</span>
-                </button>
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-10">
-                    <p className="px-4 py-2 text-xs sm:text-sm text-gray-600 border-b truncate">{user.email}</p>
-                    {user.role === 'admin' ? (
-                      <>
-                        <Link href="/admin" className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 text-sm">
-                          <Settings className="w-4 h-4 flex-shrink-0" />
-                          Admin Panel
-                        </Link>
-                        <button
-                          onClick={handleLogout}
-                          className="w-full text-left flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 text-sm"
-                        >
-                          <LogOut className="w-4 h-4 flex-shrink-0" />
-                          Logout
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <Link href="/profile" className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 text-sm">
-                          <User className="w-4 h-4 flex-shrink-0" />
-                          My Profile
-                        </Link>
-                        <button
-                          onClick={handleLogout}
-                          className="w-full text-left flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 text-sm"
-                        >
-                          <LogOut className="w-4 h-4 flex-shrink-0" />
-                          Logout
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
+            </div>
           ) : (
             <Link href="/login" className="text-gray-600 hover:text-primary font-medium text-sm">
               Login

@@ -40,6 +40,7 @@ export default function CartPage() {
     try {
       await fetch(`/api/cart/${itemId}`, { method: 'DELETE' })
       setCartItems(cartItems.filter((item) => item.id !== itemId))
+      try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
     } catch (error) {
       console.error('Failed to remove item:', error)
     }
@@ -63,6 +64,7 @@ export default function CartPage() {
             item.id === itemId ? updatedItem : item
           )
         )
+        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
       }
     } catch (error) {
       console.error('Failed to update quantity:', error)

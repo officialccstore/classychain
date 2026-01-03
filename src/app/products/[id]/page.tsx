@@ -52,6 +52,12 @@ export default function ProductDetailPage() {
       })
       if (response.ok) {
         showToast(`${product?.name} added to cart!`, 'success', 3000)
+        try {
+          // Notify header and other components that cart changed
+          window.dispatchEvent(new CustomEvent('cartUpdated'))
+        } catch (e) {
+          // ignore for environments without window
+        }
       } else {
         showToast('Failed to add item to cart', 'error', 3000)
       }

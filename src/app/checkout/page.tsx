@@ -50,6 +50,7 @@ export default function CheckoutPage() {
     if (!isLoggedIn) {
       // Save cart data to localStorage
       localStorage.setItem('pendingCart', JSON.stringify(cartItems))
+      try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
       // Redirect to login
       router.push('/login?redirect=/checkout&pendingCart=true')
       return
@@ -69,6 +70,7 @@ export default function CheckoutPage() {
       if (response.ok) {
         // Clear cart after order
         await fetch('/api/cart', { method: 'DELETE' })
+        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
         router.push('/checkout?success=true')
       }
     } catch (error) {
