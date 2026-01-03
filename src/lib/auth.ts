@@ -31,3 +31,43 @@ export function getTokenFromReq(req: NextRequest | { headers?: any, cookies?: an
   } catch (e) {}
   return null
 }
+
+export async function verifyAuth(req: NextRequest | { headers?: any, cookies?: any } | Request) {
+  // Accept either NextRequest or standard Request
+  try {
+    let token: string | null = null
+
+    // If it's a NextRequest-like object
+    if ((req as any).headers) {
+      token = getTokenFromReq(req as any)
+    }
+
+    // If still no token and Request provided, try to read Authorization header
+    if (!token && (req as Request)) {
+      try {
+        const maybeReq = req as Request
+        const authHeader = maybeReq.headers.get('authorization')
+        if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.split(' ')[1]
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!token) return null
+
+    const payload = verifyToken(token)
+    if (!payload) return null
+
+    // Standardize return shape
+    return {
+      userId: (payload as any).id || (payload as any).userId,
+      email: (payload as any).email,
+      role: (payload as any).role,
+      payload,
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+// Note: `verifyAuth` is exported via its function declaration above.

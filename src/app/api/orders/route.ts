@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import prisma from '@/lib/prisma'
+import { verifyAuth } from '@/lib/auth'
 
 export async function POST(request: Request) {
   try {
-    const { userId, items, totalPrice, shippingAddress } = await request.json()
+    const auth = await verifyAuth(request)
+    if (!auth?.userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { items, totalPrice, shippingAddress } = await request.json()
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'No items provided' }, { status: 400 })
+    }
 
     const order = await prisma.order.create({
       data: {
-        userId,
+        userId: auth.userId,
         totalPrice,
         shippingAddress,
         items: {
@@ -23,8 +31,8 @@ export async function POST(request: Request) {
       include: { items: { include: { product: true } } },
     })
 
-    // Clear cart after order
-    await prisma.cartItem.deleteMany({})
+    // Clear cart for this user after order
+    await prisma.cartItem.deleteMany({ where: { userId: auth.userId } })
 
     return NextResponse.json(order, { status: 201 })
   } catch (error) {
@@ -34,11 +42,18 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    const auth = await verifyAuth(request)
+    if (!auth?.userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    const requestedUserId = searchParams.get('userId')
+
+    const targetUserId = auth.role === 'admin' && requestedUserId ? requestedUserId : auth.userId
 
     const orders = await prisma.order.findMany({
-      where: userId ? { userId } : {},
+      where: { userId: targetUserId },
       include: { items: { include: { product: true } } },
       orderBy: { createdAt: 'desc' },
     })

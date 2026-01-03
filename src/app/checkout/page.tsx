@@ -27,9 +27,15 @@ export default function CheckoutPage() {
   useEffect(() => {
     const fetchCart = async () => {
       try {
-        const response = await fetch('/api/cart')
+        const token = localStorage.getItem('token')
+        const response = await fetch('/api/cart', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
         const data = await response.json()
-        setCartItems(data)
+        // Ensure we always set an array for cart items. API may return
+        // { error } or { items: [...] } in some cases — normalize it.
+        const normalized = Array.isArray(data) ? data : (data?.items || [])
+        setCartItems(normalized)
       } catch (error) {
         console.error('Failed to fetch cart:', error)
       } finally {
@@ -44,7 +50,10 @@ export default function CheckoutPage() {
     fetchCart()
   }, [])
 
-  const total = cartItems.reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0)
+  // Guard reduce in case cartItems is unexpectedly not an array at runtime.
+  const total = Array.isArray(cartItems)
+    ? cartItems.reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0)
+    : 0
 
   const handleFinalizeCart = async () => {
     if (!isLoggedIn) {
@@ -123,7 +132,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="text-right">
                   <p className="font-semibold">Qty: {item.quantity}</p>
-                  <p className="text-sm text-gray-600">${((item.product?.price || 0) * item.quantity).toFixed(2)}</p>
+                  <p className="text-sm text-gray-600">₹{((item.product?.price || 0) * item.quantity).toFixed(2)}</p>
                 </div>
               </div>
             ))}
@@ -133,21 +142,21 @@ export default function CheckoutPage() {
           <div className="space-y-2 mb-6 border-b pb-6">
             <div className="flex justify-between">
               <span className="text-gray-600">Subtotal</span>
-              <span className="font-bold">${total.toFixed(2)}</span>
+              <span className="font-bold">₹{total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Shipping</span>
-              <span className="font-bold">$0.00</span>
+              <span className="font-bold">₹0.00</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Tax (8%)</span>
-              <span className="font-bold">${(total * 0.08).toFixed(2)}</span>
+              <span className="font-bold">₹{(total * 0.08).toFixed(2)}</span>
             </div>
           </div>
 
           <div className="flex justify-between text-xl font-bold mb-8">
             <span>Total</span>
-            <span>${(total * 1.08).toFixed(2)}</span>
+            <span>₹{(total * 1.08).toFixed(2)}</span>
           </div>
 
           {/* Login Prompt or Finalize Button */}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ShoppingCart, Heart, User, Search, LogOut, Settings } from 'lucide-react'
+import { ShoppingCart, User, Search, LogOut, Settings } from 'lucide-react'
 import { LogoWithText } from './Logo'
 
 interface UserData {
@@ -40,9 +40,17 @@ export default function Header() {
       try {
         // If user is logged in, prefer server-side cart
         if (user) {
-          const response = await fetch('/api/cart')
+          const token = localStorage.getItem('token')
+          const response = await fetch('/api/cart', {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!response.ok) {
+            // Unauthorized or server error — fall back to 0
+            setCartCount(0)
+            return
+          }
           const data = await response.json()
-          const count = Array.isArray(data) ? data.length : 0
+          const count = Array.isArray(data) ? data.length : Array.isArray(data?.items) ? data.items.length : 0
           setCartCount(count)
           return
         }
@@ -57,6 +65,7 @@ export default function Header() {
         }
       } catch (error) {
         console.error('Failed to fetch cart count:', error)
+        setCartCount(0)
       }
     }
 
@@ -110,9 +119,6 @@ export default function Header() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <Link href="/wishlist" className="text-gray-600 hover:text-primary flex-shrink-0">
-            <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
-          </Link>
           <Link href="/cart" className="text-gray-600 hover:text-primary relative flex-shrink-0">
             <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
             {cartCount > 0 && (

@@ -22,6 +22,11 @@ export async function PUT(request: Request, ctx: any) {
     const product = await prisma.product.update({
       where: { id },
       data: body,
+      include: {
+        category: true,
+        subcategory: true,
+        sizeVariants: true
+      }
     })
 
     return NextResponse.json(product)
@@ -29,6 +34,7 @@ export async function PUT(request: Request, ctx: any) {
     if (error.code === 'P2025') {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
+    console.error('Failed to update product:', error)
     return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
   }
 }
@@ -51,6 +57,7 @@ export async function DELETE(request: Request, ctx: any) {
     if (error.code === 'P2025') {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
+    console.error('Failed to delete product:', error)
     return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
   }
 }

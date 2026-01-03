@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import prisma from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +10,9 @@ export async function GET(
     const product = await prisma.product.findUnique({
       where: { id },
       include: {
+        category: true,
+        subcategory: true,
+        sizeVariants: true,
         reviews: {
           include: { user: { select: { name: true } } },
         },
@@ -38,6 +39,11 @@ export async function PUT(
     const product = await prisma.product.update({
       where: { id },
       data: body,
+      include: {
+        category: true,
+        subcategory: true,
+        sizeVariants: true
+      }
     })
     return NextResponse.json(product)
   } catch (error) {

@@ -1,92 +1,227 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ShoppingCart, Star, ChevronDown, X } from 'lucide-react'
 import { showToast } from '@/components/Toast'
+
+interface SizeVariant {
+  id: string
+  size: string
+  quantity: number
+}
 
 interface Product {
   id: string
   name: string
   price: number
   image: string
-  category: string
-  brand: string
-  rating: number
+  description: string
+  categoryId: string
+  subcategoryId?: string
+  sizeVariants?: SizeVariant[]
+  category?: { id: string; name: string }
+  subcategory?: { id: string; name: string }
 }
 
 export default function ProductsPage() {
+  const searchParams = useSearchParams()
+  
+  // Lazy initialize selectedCategories from URL params
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [priceRange, setPriceRange] = useState([0, 200])
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const categoryIdFromUrl = searchParams.get('categoryId')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    return categoryIdFromUrl ? [categoryIdFromUrl] : []
+  })
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([])
+  const [priceRange, setPriceRange] = useState([0, 500])
   const [sortBy, setSortBy] = useState('featured')
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  const [categories, setCategories] = useState<any[]>([])
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [addingId, setAddingId] = useState<string | null>(null)
 
-  const categories = ['Running', 'Casual', 'Formal', 'Sports', 'Premium']
-  const brands = ['Nike', 'Adidas', 'Puma', 'New Balance']
+  useEffect(() => {
+    // Check if user is logged in
+    const token = localStorage.getItem('token')
+    setIsLoggedIn(!!token)
+  }, [])
+
+  useEffect(() => {
+    // Fetch categories
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch('/api/categories')
+        const data = await res.json()
+        setCategories(data)
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
+      }
+    }
+    fetchCategories()
+  }, [])
 
   const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
     e.preventDefault()
     e.stopPropagation()
 
+    setAddingId(product.id)
     try {
-      const response = await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: product.id,
-          quantity: 1,
-        }),
-      })
+      if (isLoggedIn) {
+        // User is logged in - add to database
+        const token = localStorage.getItem('token')
+        const response = await fetch('/api/cart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            productId: product.id,
+            quantity: 1,
+          }),
+        })
 
-      if (response.ok) {
-        showToast(`${product.name} added to cart!`, 'success', 3000)
+        if (response.ok) {
+          showToast(`${product.name} added to cart!`, 'success', 3000)
+          // Notify header that cart was updated
+          window.dispatchEvent(new CustomEvent('cartUpdated'))
+        } else {
+          showToast('Failed to add item to cart', 'error', 3000)
+        }
       } else {
-        showToast('Failed to add item to cart', 'error', 3000)
+        // User is not logged in - save to localStorage under 'pendingCart'
+        const pendingCart = JSON.parse(localStorage.getItem('pendingCart') || '[]')
+        const existingItem = pendingCart.find((item: any) => item.productId === product.id)
+
+        if (existingItem) {
+          existingItem.quantity += 1
+        } else {
+          pendingCart.push({
+            productId: product.id,
+            quantity: 1,
+            sizeVariantId: null
+          })
+        }
+
+        localStorage.setItem('pendingCart', JSON.stringify(pendingCart))
+        showToast(`${product.name} added to cart!`, 'success', 3000)
+        // Notify header that cart was updated
+        window.dispatchEvent(new CustomEvent('cartUpdated'))
       }
     } catch (error) {
       showToast('Error adding to cart', 'error', 3000)
       console.error('Failed to add to cart:', error)
+    } finally {
+      setAddingId(null)
     }
   }
 
   useEffect(() => {
     const fetchProducts = async () => {
+      setLoading(true)
       try {
-        const categoryParam = selectedCategories.length > 0 ? selectedCategories[0] : ''
-        const url = categoryParam
-          ? `/api/products?category=${categoryParam}`
-          : '/api/products'
+        const params = new URLSearchParams()
+        params.append('page', String(page))
+        params.append('limit', '12')
+        if (selectedCategories.length > 0) params.append('categoryId', selectedCategories[0])
+        if (selectedSubcategories.length > 0) params.append('subcategoryId', selectedSubcategories[0])
+        if (priceRange[0] > 0) params.append('minPrice', String(priceRange[0]))
+        if (priceRange[1] < 500) params.append('maxPrice', String(priceRange[1]))
+        if (sortBy) params.append('sort', sortBy)
+
+        const url = `/api/products?${params.toString()}`
         const response = await fetch(url)
         const data = await response.json()
-        setProducts(data.products)
+        // data may contain { products, pagination }
+        if (Array.isArray(data.products)) {
+          if (page === 1) {
+            setProducts(data.products)
+          } else {
+            setProducts((prev) => [...prev, ...data.products])
+          }
+          setTotal(data.pagination?.total || 0)
+          setPages(data.pagination?.pages || 1)
+        } else if (Array.isArray(data)) {
+          setProducts(data)
+          setTotal(data.length)
+          setPages(1)
+        } else {
+          setProducts([])
+          setTotal(0)
+          setPages(1)
+        }
       } catch (error) {
         console.error('Failed to fetch products:', error)
+        setProducts([])
+        setTotal(0)
+        setPages(1)
       } finally {
         setLoading(false)
       }
     }
 
     fetchProducts()
-  }, [selectedCategories])
+  }, [selectedCategories, selectedSubcategories, page, priceRange, sortBy])
 
-  const handleCategoryChange = (category: string) => {
-    setSelectedCategories(prev =>
-      prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    )
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategories(prev => (prev.includes(categoryId) ? prev.filter(c => c !== categoryId) : [categoryId]))
+    setSelectedSubcategories([])
+    setProducts([])
+    setPage(1)
   }
 
-  const filteredProducts = products
-    .filter(p => priceRange[0] <= p.price && p.price <= priceRange[1])
-    .sort((a, b) => {
-      if (sortBy === 'price-low') return a.price - b.price
-      if (sortBy === 'price-high') return b.price - a.price
-      if (sortBy === 'newest') return 0
-      return 0
-    })
+  const handleSubcategoryChange = (subcategoryId: string) => {
+    setSelectedSubcategories(prev =>
+      prev.includes(subcategoryId)
+        ? prev.filter(s => s !== subcategoryId)
+        : [subcategoryId]
+    )
+    setProducts([])
+    setPage(1)
+  }
+
+  const isOutOfStock = (product: Product) => {
+    return !product.sizeVariants || product.sizeVariants.length === 0 || product.sizeVariants.every(v => v.quantity === 0)
+  }
+
+  const filteredProducts = products && Array.isArray(products)
+    ? products
+        .filter(p => priceRange[0] <= p.price && p.price <= priceRange[1])
+        .sort((a, b) => {
+          if (sortBy === 'price-low') return a.price - b.price
+          if (sortBy === 'price-high') return b.price - a.price
+          if (sortBy === 'newest') return 0
+          return 0
+        })
+    : []
+
+  // Pagination controls
+  const goToPage = (p: number) => {
+    if (p < 1 || p > pages) return
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !loading && page < pages) {
+            setPage((p) => p + 1)
+          }
+        })
+      },
+      { root: null, rootMargin: '400px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [sentinelRef, loading, pages, page])
 
   return (
     <div className="min-h-screen bg-white">
@@ -107,19 +242,45 @@ export default function ProductsPage() {
               <div>
                 <h3 className="text-lg font-bold mb-4 text-black">CATEGORIES</h3>
                 <div className="space-y-3">
-                  {categories.map(category => (
-                    <label key={category} className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedCategories.includes(category)}
-                        onChange={() => handleCategoryChange(category)}
-                        className="w-4 h-4 rounded border-gray-300"
-                      />
-                      <span className="ml-3 text-gray-700 hover:text-black transition">{category}</span>
-                    </label>
-                  ))}
+                  {categories && categories.length > 0 ? (
+                    categories.map(category => (
+                      <label key={category.id} className="flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedCategories.includes(category.id)}
+                          onChange={() => handleCategoryChange(category.id)}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <span className="ml-3 text-gray-700 hover:text-black transition">{category.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-600">Loading categories...</p>
+                  )}
                 </div>
               </div>
+
+              {/* Subcategories Filter */}
+              {selectedCategories.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-bold mb-4 text-black">SUBCATEGORIES</h3>
+                  <div className="space-y-3">
+                    {categories
+                      .find(c => c.id === selectedCategories[0])
+                      ?.subcategories?.map((subcat: any) => (
+                        <label key={subcat.id} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSubcategories.includes(subcat.id)}
+                            onChange={() => handleSubcategoryChange(subcat.id)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="ml-3 text-gray-700 hover:text-black transition">{subcat.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               {/* Price Filter */}
               <div>
@@ -128,56 +289,16 @@ export default function ProductsPage() {
                   <input
                     type="range"
                     min="0"
-                    max="300"
+                    max="500"
                     value={priceRange[1]}
-                    onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
+                    onChange={(e) => { setPriceRange([priceRange[0], parseInt(e.target.value)]); setProducts([]); setPage(1) }}
                     className="w-full"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">${priceRange[0]}</span>
+                    <span className="text-sm font-semibold">₹{priceRange[0]}</span>
                     <span className="text-gray-400">-</span>
-                    <span className="text-sm font-semibold">${priceRange[1]}</span>
+                    <span className="text-sm font-semibold">₹{priceRange[1]}</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Brand Filter */}
-              <div>
-                <h3 className="text-lg font-bold mb-4 text-black">BRAND</h3>
-                <div className="space-y-3">
-                  {brands.map(brand => (
-                    <label key={brand} className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300"
-                      />
-                      <span className="ml-3 text-gray-700 hover:text-black transition">{brand}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Rating Filter */}
-              <div>
-                <h3 className="text-lg font-bold mb-4 text-black">RATING</h3>
-                <div className="space-y-3">
-                  {[5, 4, 3].map(rating => (
-                    <label key={rating} className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300"
-                      />
-                      <span className="ml-3 flex items-center gap-1">
-                        {Array.from({ length: rating }).map((_, i) => (
-                          <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                        ))}
-                        {Array.from({ length: 5 - rating }).map((_, i) => (
-                          <Star key={i} className="w-4 h-4 text-gray-300" />
-                        ))}
-                        <span className="text-sm text-gray-600">& up</span>
-                      </span>
-                    </label>
-                  ))}
                 </div>
               </div>
             </div>
@@ -195,7 +316,7 @@ export default function ProductsPage() {
                   Filter
                 </button>
                 <p className="text-sm text-gray-600">
-                  Showing <span className="font-semibold">{filteredProducts.length}</span> products
+                  Showing <span className="font-semibold">{total}</span> products
                 </p>
               </div>
 
@@ -206,10 +327,10 @@ export default function ProductsPage() {
                   <ChevronDown className="w-4 h-4" />
                 </button>
                 <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                  <button onClick={() => setSortBy('featured')} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Featured</button>
-                  <button onClick={() => setSortBy('price-low')} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Price: Low to High</button>
-                  <button onClick={() => setSortBy('price-high')} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Price: High to Low</button>
-                  <button onClick={() => setSortBy('newest')} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Newest</button>
+                  <button onClick={() => { setSortBy('featured'); setProducts([]); setPage(1) }} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Featured</button>
+                  <button onClick={() => { setSortBy('price-low'); setProducts([]); setPage(1) }} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Price: Low to High</button>
+                  <button onClick={() => { setSortBy('price-high'); setProducts([]); setPage(1) }} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Price: High to Low</button>
+                  <button onClick={() => { setSortBy('newest'); setProducts([]); setPage(1) }} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Newest</button>
                 </div>
               </div>
             </div>
@@ -223,9 +344,10 @@ export default function ProductsPage() {
               <div className="text-center py-16">
                 <p className="text-gray-500 text-lg">No products found matching your filters</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredProducts.map((product) => (
+              ) : (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredProducts.map((product) => (
                   <Link key={product.id} href={`/products/${product.id}`}>
                     <div className="group cursor-pointer">
                       {/* Image */}
@@ -241,46 +363,55 @@ export default function ProductsPage() {
                       {/* Product Info */}
                       <div className="space-y-2">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          {product.category}
+                          {product.category?.name || product.categoryId}
                         </p>
                         <h3 className="text-lg font-bold text-black group-hover:text-yellow-500 transition line-clamp-2">
                           {product.name}
                         </h3>
-                        <p className="text-sm text-gray-600">{product.brand}</p>
+                        <p className="text-sm text-gray-600">{product.description}</p>
 
-                        {/* Rating */}
+                        {/* Availability */}
                         <div className="flex items-center gap-2">
-                          <div className="flex gap-0.5">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`w-3.5 h-3.5 ${
-                                  i < Math.round(product.rating)
-                                    ? 'fill-yellow-400 text-yellow-400'
-                                    : 'text-gray-300'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-xs text-gray-600">({product.rating.toFixed(1)})</span>
+                          {isOutOfStock(product) ? (
+                            <span className="text-xs font-semibold text-red-600">OUT OF STOCK</span>
+                          ) : (
+                            <span className="text-xs font-semibold text-green-600">IN STOCK</span>
+                          )}
                         </div>
 
                         {/* Price & CTA */}
                         <div className="pt-4 flex items-center justify-between border-t border-gray-200">
                           <span className="text-2xl font-black text-black">
-                            ${product.price.toFixed(2)}
+                            ₹{product.price.toFixed(2)}
                           </span>
                           <button
+                            className="ml-3 bg-black text-white px-4 py-2 rounded-lg font-bold hover:bg-gray-800 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                            disabled={addingId === String(product.id)}
                             onClick={(e) => handleAddToCart(e, product)}
-                            className="bg-black text-white p-3 rounded-lg hover:bg-yellow-500 transition-colors"
                           >
-                            <ShoppingCart className="w-5 h-5" />
+                            {addingId === String(product.id) ? (
+                              <span className="flex items-center gap-2">
+                                <span className="h-4 w-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                                Adding...
+                              </span>
+                            ) : (
+                              'Add to Cart'
+                            )}
                           </button>
                         </div>
                       </div>
                     </div>
                   </Link>
                 ))}
+                </div>
+
+                {/* Infinite scroll sentinel */}
+                <div ref={sentinelRef} className="w-full h-1" />
+                {loading && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">Loading more products...</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -62,13 +62,19 @@ export default function LoginPage() {
 
       // Check for redirect param (use window.location to avoid SSR/useSearchParams constraints)
       const urlParams = new URL(window.location.href).searchParams
-      const redirect = urlParams.get('redirect') || (data.user.role === 'admin' ? '/admin' : '/products')
+      const redirect = urlParams.get('redirect') || urlParams.get('next') || (data.user.role === 'admin' ? '/admin' : '/products')
       window.location.href = redirect
     } catch (error) {
       setError('An error occurred. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleContinueAsGuest = () => {
+    const urlParams = new URL(window.location.href).searchParams
+    const next = urlParams.get('redirect') || urlParams.get('next') || '/products'
+    window.location.href = next
   }
 
   return (
@@ -130,6 +136,13 @@ export default function LoginPage() {
             className="w-full bg-secondary text-black py-2 rounded-lg font-bold hover:bg-yellow-400 transition disabled:bg-gray-300"
           >
             {loading ? 'Logging in...' : 'Login'}
+          </button>
+          <button
+            type="button"
+            onClick={handleContinueAsGuest}
+            className="w-full border border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
+          >
+            Continue as Guest
           </button>
         </form>
 

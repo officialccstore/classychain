@@ -11,10 +11,11 @@ interface Product {
   description: string
   price: number
   image: string
-  category: string
+  category?: { id: string; name: string } | string
   brand: string
   rating: number
-  stock: number
+  stock?: number
+  sizeVariants?: { id: string; size: string; quantity: number }[]
   reviews?: any[]
 }
 
@@ -23,6 +24,9 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -30,6 +34,11 @@ export default function ProductDetailPage() {
         const response = await fetch(`/api/products/${params.id}`)
         const data = await response.json()
         setProduct(data)
+        // preselect first available size variant if any
+        if (data?.sizeVariants && data.sizeVariants.length > 0) {
+          const firstAvailable = data.sizeVariants.find((v: any) => v.quantity > 0) || data.sizeVariants[0]
+          setSelectedVariantId(firstAvailable?.id || null)
+        }
       } catch (error) {
         console.error('Failed to fetch product:', error)
       } finally {
@@ -40,30 +49,46 @@ export default function ProductDetailPage() {
     fetchProduct()
   }, [params.id])
 
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    setIsLoggedIn(!!token)
+  }, [])
+
   const handleAddToCart = async () => {
     try {
-      const response = await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: product?.id,
-          quantity,
-        }),
-      })
-      if (response.ok) {
-        showToast(`${product?.name} added to cart!`, 'success', 3000)
-        try {
-          // Notify header and other components that cart changed
-          window.dispatchEvent(new CustomEvent('cartUpdated'))
-        } catch (e) {
-          // ignore for environments without window
+      setAdding(true)
+      if (isLoggedIn) {
+        const token = localStorage.getItem('token')
+        const response = await fetch('/api/cart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            productId: product?.id,
+            quantity,
+            sizeVariantId: selectedVariantId,
+          }),
+        })
+        if (response.ok) {
+          showToast(`${product?.name} added to cart!`, 'success', 3000)
+          try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
+        } else {
+          showToast('Failed to add item to cart', 'error', 3000)
         }
       } else {
-        showToast('Failed to add item to cart', 'error', 3000)
+        // Save to pendingCart for guests
+        const pendingCart = JSON.parse(localStorage.getItem('pendingCart') || '[]')
+        const existing = pendingCart.find((it: any) => it.productId === product?.id && it.sizeVariantId === selectedVariantId)
+        if (existing) existing.quantity += quantity
+        else pendingCart.push({ productId: product?.id, quantity, sizeVariantId: selectedVariantId })
+        localStorage.setItem('pendingCart', JSON.stringify(pendingCart))
+        showToast(`${product?.name} added to cart!`, 'success', 3000)
+        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
       }
     } catch (error) {
       showToast('Error adding to cart', 'error', 3000)
       console.error('Failed to add to cart:', error)
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -84,8 +109,8 @@ export default function ProductDetailPage() {
           </div>
 
           <div>
-            <div className="mb-4">
-              <span className="text-sm text-gray-500">{product.category}</span>
+              <div className="mb-4">
+              <span className="text-sm text-gray-500">{(product as any).category?.name || (product as any).category || (product as any).categoryId}</span>
               <h1 className="text-4xl font-bold mt-2 mb-2">{product.name}</h1>
               <p className="text-gray-600 mb-4">{product.brand}</p>
             </div>
@@ -110,7 +135,7 @@ export default function ProductDetailPage() {
 
             <div className="mb-6">
               <span className="text-4xl font-bold text-primary">
-                ${product.price.toFixed(2)}
+                ₹{product.price.toFixed(2)}
               </span>
               <p className="text-green-600 font-medium mt-2">
                 {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
@@ -118,6 +143,25 @@ export default function ProductDetailPage() {
             </div>
 
             <p className="text-gray-700 mb-6">{product.description}</p>
+
+            {/* Size selection */}
+            {product.sizeVariants && product.sizeVariants.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-sm font-semibold mb-2">Select Size</h4>
+                <div className="flex flex-wrap gap-2">
+                  {product.sizeVariants.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVariantId(v.id)}
+                      disabled={v.quantity === 0}
+                      className={`px-3 py-2 border rounded ${selectedVariantId === v.id ? 'bg-gray-800 text-white' : ''} ${v.quantity === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {v.size} {v.quantity === 0 ? '(Out)' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-4 mb-8">
               <div className="flex items-center border border-gray-300 rounded-lg">
@@ -138,11 +182,20 @@ export default function ProductDetailPage() {
 
               <button
                 onClick={handleAddToCart}
-                disabled={product.stock === 0}
+                disabled={product.stock === 0 || adding}
                 className="flex-1 bg-secondary text-black py-3 rounded-lg font-bold hover:bg-yellow-400 transition disabled:bg-gray-300 flex items-center justify-center gap-2"
               >
-                <ShoppingCart className="w-5 h-5" />
-                Add to Cart
+                {adding ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-black/40 border-t-black rounded-full animate-spin" />
+                    Adding...
+                  </span>
+                ) : (
+                  <>
+                    <ShoppingCart className="w-5 h-5" />
+                    Add to Cart
+                  </>
+                )}
               </button>
 
               <button className="border border-gray-300 px-4 py-3 rounded-lg hover:bg-gray-100 transition">
@@ -154,7 +207,7 @@ export default function ProductDetailPage() {
               <h3 className="font-bold mb-4">Product Details</h3>
               <ul className="space-y-2 text-gray-600">
                 <li>Brand: <span className="font-medium text-gray-800">{product.brand}</span></li>
-                <li>Category: <span className="font-medium text-gray-800">{product.category}</span></li>
+                <li>Category: <span className="font-medium text-gray-800">{(product as any).category?.name || (product as any).category || (product as any).categoryId}</span></li>
                 <li>Size: <span className="font-medium text-gray-800">Available sizes: 6-13</span></li>
               </ul>
             </div>
