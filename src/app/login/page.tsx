@@ -53,6 +53,7 @@ export default function LoginPage() {
             body: JSON.stringify({ items: cartItems }),
           })
           localStorage.removeItem('pendingCart')
+              try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
           showToast('Cart items transferred to your account!', 'success', 3000)
         } catch (cartError) {
           console.error('Failed to merge cart:', cartError)
