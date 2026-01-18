@@ -577,6 +577,7 @@ export default function AdminPage() {
                           description: '',
                           price: '',
                           image: '',
+                          brand: '',
                           categoryId: '',
                           subcategoryId: '',
                         });
