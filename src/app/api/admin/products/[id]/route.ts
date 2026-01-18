@@ -18,13 +18,15 @@ export async function PUT(request: Request, ctx: any) {
 
     const body = await request.json()
     const { id } = params
+    const { sizeVariants, ...productData } = body
 
     // Clean up empty subcategoryId
     const updateData = {
-      ...body,
-      subcategoryId: body.subcategoryId || undefined
+      ...productData,
+      subcategoryId: productData.subcategoryId || undefined
     };
 
+    // Update product and handle size variants separately
     const product = await prisma.product.update({
       where: { id },
       data: updateData,
@@ -34,6 +36,37 @@ export async function PUT(request: Request, ctx: any) {
         sizeVariants: true
       }
     })
+
+    // If sizeVariants are provided, update them
+    if (sizeVariants && Array.isArray(sizeVariants)) {
+      // Delete existing size variants
+      await prisma.sizeVariant.deleteMany({
+        where: { productId: id }
+      })
+
+      // Create new size variants
+      if (sizeVariants.length > 0) {
+        await prisma.sizeVariant.createMany({
+          data: sizeVariants.map((sv: any) => ({
+            productId: id,
+            size: sv.size,
+            quantity: sv.quantity
+          }))
+        })
+      }
+
+      // Fetch updated product with new size variants
+      const updatedProduct = await prisma.product.findUnique({
+        where: { id },
+        include: {
+          category: true,
+          subcategory: true,
+          sizeVariants: true
+        }
+      })
+
+      return NextResponse.json(updatedProduct)
+    }
 
     return NextResponse.json(product)
   } catch (error: any) {
