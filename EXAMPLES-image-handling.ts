@@ -1,5 +1,7 @@
-// Example: If you want multiple images per product
-// Update your Prisma schema:
+/*
+Example: If you want multiple images per product
+
+1. Update your Prisma schema (prisma/schema.prisma):
 
 model Product {
   id              String        @id @default(auto()) @map("_id") @db.ObjectId
@@ -12,16 +14,24 @@ model Product {
   // ... rest of your fields
 }
 
-// Then use like this:
-const product = await prisma.product.create({
-  data: {
-    name: "Running Shoes",
-    image: "https://cloudinary.com/main-image.jpg",
-    images: [
-      "https://cloudinary.com/view1.jpg",
-      "https://cloudinary.com/view2.jpg",
-      "https://cloudinary.com/view3.jpg"
-    ],
-    // ... other fields
-  }
-})
+2. Then use like this:
+*/
+
+export async function exampleMultipleImages() {
+  const prisma = {} as any; // Placeholder
+  
+  const product = await prisma.product.create({
+    data: {
+      name: "Running Shoes",
+      image: "https://cloudinary.com/main-image.jpg",
+      images: [
+        "https://cloudinary.com/view1.jpg",
+        "https://cloudinary.com/view2.jpg",
+        "https://cloudinary.com/view3.jpg"
+      ],
+      // ... other fields
+    }
+  })
+  
+  return product;
+}
