@@ -29,6 +29,7 @@ interface Product {
   description: string;
   price: number;
   image: string;
+  brand: string;
   categoryId: string;
   subcategoryId?: string;
   sizeVariants?: SizeVariant[];
