@@ -127,7 +127,6 @@ export default function AboutPage() {
                   src={`https://www.instagram.com/reel/${reel.id}/embed`}
                   title={reel.title}
                   allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-                  allowFullScreen
                   className="h-full w-full"
                 />
               </div>

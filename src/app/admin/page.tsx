@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import ImageUpload from '@/components/ImageUpload';
 
 interface SizeVariant {
   id: string;
@@ -406,13 +407,21 @@ export default function AdminPage() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-semibold mb-1">Image URL</label>
-                  <input
-                    type="url"
-                    value={productForm.image}
-                    onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
-                    className="w-full border rounded px-3 py-2"
+                  <ImageUpload
+                    label="Product Image"
+                    currentImage={productForm.image}
+                    onUploadComplete={(url) => setProductForm({ ...productForm, image: url })}
                   />
+                  <div className="mt-2">
+                    <label className="block text-sm font-semibold mb-1">Or paste Image URL</label>
+                    <input
+                      type="url"
+                      value={productForm.image}
+                      onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="https://..."
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
