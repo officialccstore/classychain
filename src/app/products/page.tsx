@@ -40,7 +40,7 @@ function ProductsPageContent() {
     return categoryIdFromUrl ? [categoryIdFromUrl] : []
   })
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([])
-  const [priceRange, setPriceRange] = useState([0, 500])
+  const [priceRange, setPriceRange] = useState([0, 100000])
   const [sortBy, setSortBy] = useState('featured')
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
