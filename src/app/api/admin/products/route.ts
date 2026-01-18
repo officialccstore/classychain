@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         price,
         image,
         categoryId,
-        subcategoryId,
+        subcategoryId: subcategoryId || undefined, // Convert empty string to undefined
         brand,
         sizeVariants: sizeVariants && sizeVariants.length > 0 ? {
           create: sizeVariants

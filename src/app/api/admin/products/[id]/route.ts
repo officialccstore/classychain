@@ -19,9 +19,15 @@ export async function PUT(request: Request, ctx: any) {
     const body = await request.json()
     const { id } = params
 
+    // Clean up empty subcategoryId
+    const updateData = {
+      ...body,
+      subcategoryId: body.subcategoryId || undefined
+    };
+
     const product = await prisma.product.update({
       where: { id },
-      data: body,
+      data: updateData,
       include: {
         category: true,
         subcategory: true,
