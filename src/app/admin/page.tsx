@@ -52,6 +52,7 @@ export default function AdminPage() {
     description: '',
     price: '',
     image: '',
+    brand: '',
     categoryId: '',
     subcategoryId: '',
   });
@@ -92,12 +93,15 @@ export default function AdminPage() {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
+      const token = localStorage.getItem('token');
       const params = new URLSearchParams();
       params.append('page', String(page));
       params.append('limit', '12');
       if (selectedCategoryFilter) params.append('categoryId', selectedCategoryFilter);
       if (selectedSubcategoryFilter) params.append('subcategoryId', selectedSubcategoryFilter);
-      const res = await fetch(`/api/products?${params.toString()}`);
+      const res = await fetch(`/api/admin/products?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (!res.ok) {
         const text = await res.text().catch(() => '')
         const msg = `Failed to fetch products: ${res.status} ${res.statusText} ${text}`
@@ -197,10 +201,14 @@ export default function AdminPage() {
 
       const url = editingProductId ? `/api/admin/products/${editingProductId}` : '/api/admin/products';
       const method = editingProductId ? 'PUT' : 'POST';
+      const token = localStorage.getItem('token');
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload),
       });
 
@@ -210,7 +218,7 @@ export default function AdminPage() {
       }
 
       // Reset form
-      setProductForm({ name: '', description: '', price: '', image: '', categoryId: '', subcategoryId: '' });
+      setProductForm({ name: '', description: '', price: '', image: '', brand: '', categoryId: '', subcategoryId: '' });
       setSizeVariants([{ size: '', quantity: 0 }]);
       setEditingProductId(null);
       fetchProducts();
@@ -228,6 +236,7 @@ export default function AdminPage() {
       description: product.description,
       price: product.price.toString(),
       image: product.image,
+      brand: product.brand || '',
       categoryId: product.categoryId,
       subcategoryId: product.subcategoryId || '',
     });
@@ -239,7 +248,11 @@ export default function AdminPage() {
     if (!confirm('Are you sure you want to delete this product?')) return;
 
     try {
-      const res = await fetch(`/api/admin/products/${productId}`, { method: 'DELETE' });
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/admin/products/${productId}`, { 
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Failed to delete product');
       fetchProducts();
     } catch (err) {
@@ -260,9 +273,13 @@ export default function AdminPage() {
         return;
       }
 
+      const token = localStorage.getItem('token');
       const res = await fetch('/api/categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(categoryForm),
       });
 
@@ -292,9 +309,13 @@ export default function AdminPage() {
         return;
       }
 
+      const token = localStorage.getItem('token');
       const res = await fetch('/api/subcategories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(subcategoryForm),
       });
 
@@ -316,7 +337,11 @@ export default function AdminPage() {
     if (!confirm('Are you sure? This will delete all subcategories and products.')) return;
 
     try {
-      const res = await fetch(`/api/categories/${categoryId}`, { method: 'DELETE' });
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/categories/${categoryId}`, { 
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Failed to delete category');
       fetchCategories();
     } catch (err) {
@@ -328,7 +353,11 @@ export default function AdminPage() {
     if (!confirm('Are you sure you want to delete this subcategory?')) return;
 
     try {
-      const res = await fetch(`/api/subcategories/${subcategoryId}`, { method: 'DELETE' });
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/subcategories/${subcategoryId}`, { 
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Failed to delete subcategory');
       fetchCategories();
     } catch (err) {
@@ -384,6 +413,20 @@ export default function AdminPage() {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-semibold mb-1">Brand *</label>
+                    <input
+                      type="text"
+                      value={productForm.brand}
+                      onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., Nike, Adidas"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
                     <label className="block text-sm font-semibold mb-1">Price *</label>
                     <input
                       type="number"
@@ -394,6 +437,7 @@ export default function AdminPage() {
                       required
                     />
                   </div>
+                  <div></div>
                 </div>
 
                 <div className="mb-4">

@@ -67,18 +67,25 @@ export default function CheckoutPage() {
 
     // If logged in, proceed with order
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           items: cartItems,
           total: total * 1.08,
         }),
-      })
+      });
 
       if (response.ok) {
         // Clear cart after order
-        await fetch('/api/cart', { method: 'DELETE' })
+        await fetch('/api/cart', { 
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
         router.push('/checkout?success=true')
       }
