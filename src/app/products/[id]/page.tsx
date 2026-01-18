@@ -104,8 +104,18 @@ export default function ProductDetailPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-gray-200 rounded-lg h-96 flex items-center justify-center text-9xl">
-            👟
+          <div className="bg-gray-200 rounded-lg h-96 overflow-hidden">
+            {product.image ? (
+              <img
+                src={product.image}
+                alt={product.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-9xl">
+                👟
+              </div>
+            )}
           </div>
 
           <div>

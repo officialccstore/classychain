@@ -13,6 +13,7 @@ interface CartItem {
     name: string
     price: number
     brand: string
+    image?: string
   }
   sizeVariant?: {
     id: string
@@ -63,6 +64,7 @@ export default function CartPage() {
                         name: product.name,
                         price: Number(product.price ?? 0),
                         brand: product.brand || 'Brand',
+                        image: product.image,
                       },
                       sizeVariant: item.sizeVariantId
                         ? product.sizeVariants?.find((v: any) => v.id === item.sizeVariantId) || null
@@ -209,8 +211,18 @@ export default function CartPage() {
                   key={item.id}
                   className="bg-white rounded-lg p-6 flex gap-6"
                 >
-                  <div className="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center text-4xl">
-                    👟
+                  <div className="w-24 h-24 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                    {item.product.image ? (
+                      <img
+                        src={item.product.image}
+                        alt={item.product.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl">
+                        👟
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1">
                     <h3 className="font-bold text-lg mb-1">

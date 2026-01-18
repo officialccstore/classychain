@@ -352,9 +352,17 @@ function ProductsPageContent() {
                     <div className="group cursor-pointer">
                       {/* Image */}
                       <div className="relative h-80 bg-gray-100 rounded-lg overflow-hidden mb-4">
-                        <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center text-7xl group-hover:scale-105 transition-transform duration-300">
-                          👟
-                        </div>
+                        {product.image ? (
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center text-7xl group-hover:scale-105 transition-transform duration-300">
+                            👟
+                          </div>
+                        )}
                         <div className="absolute top-4 right-4 bg-black text-white px-3 py-1 rounded-full text-sm font-semibold opacity-0 group-hover:opacity-100 transition">
                           Quick view
                         </div>
