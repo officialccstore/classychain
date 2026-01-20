@@ -233,6 +233,95 @@ function ProductsPageContent() {
         </div>
       </div>
 
+      {/* Mobile Filter Modal */}
+      {mobileFilterOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileFilterOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-black">Filters</h2>
+              <button onClick={() => setMobileFilterOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-8">
+              {/* Categories Filter */}
+              <div>
+                <h3 className="text-lg font-bold mb-4 text-black">CATEGORIES</h3>
+                <div className="space-y-3">
+                  {categories && categories.length > 0 ? (
+                    categories.map(category => (
+                      <label key={category.id} className="flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedCategories.includes(category.id)}
+                          onChange={() => handleCategoryChange(category.id)}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <span className="ml-3 text-gray-700 hover:text-black transition">{category.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-600">Loading categories...</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Subcategories Filter */}
+              {selectedCategories.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-bold mb-4 text-black">SUBCATEGORIES</h3>
+                  <div className="space-y-3">
+                    {categories
+                      .find(c => c.id === selectedCategories[0])
+                      ?.subcategories?.map((subcat: any) => (
+                        <label key={subcat.id} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSubcategories.includes(subcat.id)}
+                            onChange={() => handleSubcategoryChange(subcat.id)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="ml-3 text-gray-700 hover:text-black transition">{subcat.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Price Filter */}
+              <div>
+                <h3 className="text-lg font-bold mb-4 text-black">PRICE RANGE</h3>
+                <div className="space-y-4">
+                  <input
+                    type="range"
+                    min="0"
+                    max="500"
+                    value={priceRange[1]}
+                    onChange={(e) => { setPriceRange([priceRange[0], parseInt(e.target.value)]); setProducts([]); setPage(1) }}
+                    className="w-full"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold">₹{priceRange[0]}</span>
+                    <span className="text-gray-400">-</span>
+                    <span className="text-sm font-semibold">₹{priceRange[1]}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Apply Button */}
+              <button
+                onClick={() => setMobileFilterOpen(false)}
+                className="w-full bg-black text-white py-3 rounded-lg font-bold hover:bg-gray-800 transition"
+              >
+                Apply Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex gap-8">
           {/* Sidebar - Desktop */}

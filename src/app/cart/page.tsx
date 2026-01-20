@@ -19,6 +19,7 @@ interface CartItem {
     id: string
     size: string
   } | null
+  size?: string
   quantity: number
 }
 
@@ -45,7 +46,7 @@ export default function CartPage() {
             // Fallback to pending cart in localStorage for guests
             const pendingRaw = localStorage.getItem('pendingCart')
             if (pendingRaw) {
-              const pending = JSON.parse(pendingRaw) as Array<{ productId: string; quantity: number; sizeVariantId?: string | null }>
+              const pending = JSON.parse(pendingRaw) as Array<{ productId: string; quantity: number; sizeVariantId?: string | null; size?: string }>
               if (pending.length > 0) {
                 // Fetch product details for each item to display name/price/brand
                 const products = await Promise.all(
@@ -69,6 +70,7 @@ export default function CartPage() {
                       sizeVariant: item.sizeVariantId
                         ? product.sizeVariants?.find((v: any) => v.id === item.sizeVariantId) || null
                         : null,
+                      size: item.size,
                       quantity: item.quantity,
                     } as CartItem
                   })
@@ -231,8 +233,8 @@ export default function CartPage() {
                     <p className="text-gray-500 text-sm mb-1">
                       {item.product.brand}
                     </p>
-                    {item.sizeVariant?.size && (
-                      <p className="text-sm text-gray-700 mb-2">Size: {item.sizeVariant.size}</p>
+                    {item.size && (
+                      <p className="text-sm text-gray-700 mb-2">Size: {item.size}</p>
                     )}
                     <p className="font-bold">
                       ₹{item.product.price.toFixed(2)}

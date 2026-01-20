@@ -141,42 +141,6 @@ export default function Home() {
           {/* Navigation Arrows */}
         </section>
 
-        {/* Instagram Reels */}
-        <section className="py-20 px-4 bg-gray-50">
-          <div className="max-w-7xl mx-auto space-y-10">
-            <div className="text-center">
-              <span className="text-yellow-500 font-bold text-lg">
-                IN-STORE VIDEOS
-              </span>
-              <h2 className="text-5xl font-black mt-2 mb-3">From Instagram</h2>
-              <p className="text-gray-600 text-lg">
-                See ClassyChain showrooms and new drops straight from our
-                Instagram.
-              </p>
-            </div>
-            <div className="grid gap-6 md:grid-cols-3">
-              {reels.map((reel) => (
-                <div
-                  key={reel.id}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
-                >
-                  <div className="aspect-[9/16] w-full">
-                    <iframe
-                      src={`https://www.instagram.com/reel/${reel.id}/embed`}
-                      title={reel.title}
-                      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-                      className="h-full w-full"
-                    />
-                  </div>
-                  <div className="p-3 text-sm font-semibold text-gray-800">
-                    {reel.title}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* Features Section */}
         <section className="py-20 px-4 bg-white">
           <div className="max-w-7xl mx-auto">
@@ -345,6 +309,42 @@ export default function Home() {
                     <button className="w-full bg-black text-white py-3 rounded-lg font-bold hover:bg-gray-800 transition">
                       Add to Cart
                     </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Instagram Reels */}
+        <section className="py-20 px-4 bg-gray-50">
+          <div className="max-w-7xl mx-auto space-y-10">
+            <div className="text-center">
+              <span className="text-yellow-500 font-bold text-lg">
+                IN-STORE VIDEOS
+              </span>
+              <h2 className="text-5xl font-black mt-2 mb-3">From Instagram</h2>
+              <p className="text-gray-600 text-lg">
+                See ClassyChain showrooms and new drops straight from our
+                Instagram.
+              </p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3">
+              {reels.map((reel) => (
+                <div
+                  key={reel.id}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+                >
+                  <div className="aspect-[9/16] w-full">
+                    <iframe
+                      src={`https://www.instagram.com/reel/${reel.id}/embed`}
+                      title={reel.title}
+                      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                      className="h-full w-full"
+                    />
+                  </div>
+                  <div className="p-3 text-sm font-semibold text-gray-800">
+                    {reel.title}
                   </div>
                 </div>
               ))}

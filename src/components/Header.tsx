@@ -118,7 +118,7 @@ export default function Header() {
             />
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-4 sm:gap-6">
           <Link href="/cart" className="text-gray-600 hover:text-primary relative flex-shrink-0">
             <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
             {cartCount > 0 && (
