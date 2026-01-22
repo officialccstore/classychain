@@ -15,6 +15,7 @@ interface SizeVariant {
 interface Product {
   id: string
   name: string
+  mrp?: number
   price: number
   image: string
   description: string
@@ -40,7 +41,7 @@ function ProductsPageContent() {
     return categoryIdFromUrl ? [categoryIdFromUrl] : []
   })
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([])
-  const [priceRange, setPriceRange] = useState([0, 100000])
+  const [priceRange, setPriceRange] = useState([0, 40000])
   const [sortBy, setSortBy] = useState('featured')
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
@@ -130,7 +131,7 @@ function ProductsPageContent() {
         if (selectedCategories.length > 0) params.append('categoryId', selectedCategories[0])
         if (selectedSubcategories.length > 0) params.append('subcategoryId', selectedSubcategories[0])
         if (priceRange[0] > 0) params.append('minPrice', String(priceRange[0]))
-        if (priceRange[1] < 500) params.append('maxPrice', String(priceRange[1]))
+        if (priceRange[1] < 40000) params.append('maxPrice', String(priceRange[1]))
         if (sortBy) params.append('sort', sortBy)
 
         const url = `/api/products?${params.toString()}`
@@ -297,7 +298,7 @@ function ProductsPageContent() {
                   <input
                     type="range"
                     min="0"
-                    max="500"
+                    max="40000"
                     value={priceRange[1]}
                     onChange={(e) => { setPriceRange([priceRange[0], parseInt(e.target.value)]); setProducts([]); setPage(1) }}
                     className="w-full"
@@ -378,7 +379,7 @@ function ProductsPageContent() {
                   <input
                     type="range"
                     min="0"
-                    max="500"
+                    max="40000"
                     value={priceRange[1]}
                     onChange={(e) => { setPriceRange([priceRange[0], parseInt(e.target.value)]); setProducts([]); setPage(1) }}
                     className="w-full"
@@ -435,7 +436,7 @@ function ProductsPageContent() {
               </div>
               ) : (
               <div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredProducts.map((product) => (
                   <Link key={product.id} href={`/products/${product.id}`}>
                     <div className="group cursor-pointer">
@@ -477,22 +478,35 @@ function ProductsPageContent() {
                         </div>
 
                         {/* Price & CTA */}
-                        <div className="pt-4 flex items-center justify-between border-t border-gray-200">
-                          <span className="text-2xl font-black text-black">
-                            ₹{product.price.toFixed(2)}
-                          </span>
+                        <div className="pt-3 flex items-center justify-between gap-3">
+                          <div className="flex-1">
+                            {product.mrp && product.mrp > product.price && (
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm text-gray-400 line-through">
+                                  ₹{product.mrp.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                                  {Math.round(((product.mrp - product.price) / product.mrp) * 100)}% OFF
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-baseline gap-1">
+                              <p className="text-xs text-green-600 font-semibold uppercase">Offer</p>
+                              <span className="text-2xl font-black text-green-600">
+                                ₹{product.price.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          </div>
                           <button
-                            className="ml-3 bg-black text-white px-4 py-2 rounded-lg font-bold hover:bg-gray-800 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                            className="flex-shrink-0 text-black p-2.5 rounded-full hover:bg-gray-100 transition disabled:opacity-60 border-2 border-gray-200 hover:border-black"
                             disabled={addingId === String(product.id)}
                             onClick={(e) => handleAddToCart(e, product)}
+                            title="Add to Cart"
                           >
                             {addingId === String(product.id) ? (
-                              <span className="flex items-center gap-2">
-                                <span className="h-4 w-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-                                Adding...
-                              </span>
+                              <span className="h-6 w-6 border-2 border-gray-400 border-t-black rounded-full animate-spin" />
                             ) : (
-                              'Add to Cart'
+                              <ShoppingCart className="w-6 h-6 stroke-[2.5]" />
                             )}
                           </button>
                         </div>

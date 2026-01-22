@@ -11,8 +11,10 @@ interface Product {
   id: string
   name: string
   description: string
+  mrp?: number
   price: number
   image: string
+  images?: string[]
   category?: { id: string; name: string } | string
   categoryId?: string
   brand: string
@@ -32,12 +34,14 @@ export default function ProductDetailPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [adding, setAdding] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   useEffect(() => {
     const fetchProduct = async () => {
       try {
         const response = await fetch(`/api/products/${params.id}`)
         const data = await response.json()
+        console.log('Product data:', { mrp: data.mrp, price: data.price, name: data.name })
         setProduct(data)
         // preselect first available size variant if any
         if (data?.sizeVariants && data.sizeVariants.length > 0) {
@@ -128,21 +132,99 @@ export default function ProductDetailPage() {
   if (!product) {
     return <div className="text-center py-12">Product not found</div>
   }
+// Combine main image with additional images for slider
+  const allImages = [product.image, ...(product.images || [])].filter(Boolean);
+  
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % allImages.length);
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-gray-200 rounded-lg h-96 overflow-hidden">
-            {product.image ? (
-              <img
-                src={product.image}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-9xl">
-                👟
+          {/* Image Gallery with Slider */}
+          <div>
+            <div className="bg-gray-200 rounded-lg h-96 overflow-hidden relative group">
+              {allImages.length > 0 ? (
+                <>
+                  <img
+                    src={allImages[currentImageIndex]}
+                    alt={`${product.name} - Image ${currentImageIndex + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  
+                  {/* Navigation arrows - only show if multiple images */}
+                  {allImages.length > 1 && (
+                    <>
+                      <button
+                        onClick={prevImage}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/75 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Previous image"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={nextImage}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/75 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Next image"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      
+                      {/* Image indicators */}
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                        {allImages.map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setCurrentImageIndex(idx)}
+                            className={`w-2 h-2 rounded-full transition-all ${
+                              idx === currentImageIndex 
+                                ? 'bg-white w-8' 
+                                : 'bg-white/50 hover:bg-white/75'
+                            }`}
+                            aria-label={`Go to image ${idx + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-9xl">
+                  👟
+                </div>
+              )}
+            </div>
+
+            {/* Thumbnail strip - show if multiple images */}
+            {allImages.length > 1 && (
+              <div className="mt-4 flex gap-2 overflow-x-auto">
+                {allImages.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentImageIndex(idx)}
+                    className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                      idx === currentImageIndex 
+                        ? 'border-black ring-2 ring-black' 
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`${product.name} thumbnail ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -175,23 +257,35 @@ export default function ProductDetailPage() {
             )}
 
             <div className="mb-6">
-              <span className="text-4xl font-bold text-primary">
-                ₹{product.price.toFixed(2)}
-              </span>
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                {product.mrp && product.mrp > product.price && (
+                  <span className="text-xl text-gray-500 font-medium line-through decoration-2">
+                    ₹{product.mrp.toLocaleString('en-IN')}
+                  </span>
+                )}
+                <span className="text-3xl font-bold text-green-600">
+                  ₹{product.price.toLocaleString('en-IN')}
+                </span>
+                {product.mrp && product.mrp > product.price && (
+                  <span className="text-sm font-bold text-white bg-green-600 px-3 py-1 rounded-md">
+                    {Math.round(((product.mrp - product.price) / product.mrp) * 100)}% OFF
+                  </span>
+                )}
+              </div>
               <p className="font-medium mt-2">
                 {(() => {
                   if (selectedVariantId && product.sizeVariants) {
                     const selectedVariant = product.sizeVariants.find(v => v.id === selectedVariantId);
                     if (selectedVariant) {
                       return selectedVariant.quantity > 0 
-                        ? <span className="text-green-600">{selectedVariant.quantity} in stock{selectedSize ? ` (Size ${selectedSize})` : ''}</span>
-                        : <span className="text-red-600">Out of stock</span>;
+                        ? <span className="text-green-600">In Stock</span>
+                        : <span className="text-red-600">Out of Stock</span>;
                     }
                   }
                   const totalStock = product.sizeVariants?.reduce((sum, v) => sum + (v.quantity || 0), 0) || product.stock || 0;
                   return totalStock > 0 
-                    ? <span className="text-green-600">{totalStock} in stock</span> 
-                    : <span className="text-red-600">Out of stock</span>;
+                    ? <span className="text-green-600">In Stock</span> 
+                    : <span className="text-red-600">Out of Stock</span>;
                 })()}
               </p>
             </div>
@@ -216,19 +310,30 @@ export default function ProductDetailPage() {
                         }}
                         disabled={v.quantity === 0}
                         className={`
-                          min-w-[60px] px-4 py-3 border-2 rounded-lg font-semibold text-sm transition-all
+                          min-w-[60px] px-4 py-3 border-2 rounded-lg font-semibold text-base transition-all relative
                           ${selectedVariantId === v.id && selectedSize === size
                             ? 'bg-white text-black border-black' 
-                            : 'bg-black text-white border-black hover:bg-gray-800'
+                            : v.quantity === 0
+                              ? 'bg-gray-200 text-gray-800 border-gray-400'
+                              : 'bg-black text-white border-black hover:bg-gray-800'
                           }
                           ${v.quantity === 0 
-                            ? 'opacity-40 cursor-not-allowed line-through' 
+                            ? 'cursor-not-allowed' 
                             : 'cursor-pointer'
                           }
                         `}
                       >
-                        {size}
-                        {v.quantity === 0 && <span className="block text-xs mt-0.5">Out</span>}
+                        {v.quantity === 0 && (
+                          <>
+                            <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="w-full h-0.5 bg-gray-800 rotate-45 transform origin-center"></span>
+                            </span>
+                            <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="w-full h-0.5 bg-gray-800 -rotate-45 transform origin-center"></span>
+                            </span>
+                          </>
+                        )}
+                        <span className="relative z-10">{size}</span>
                       </button>
                     ));
                   })}

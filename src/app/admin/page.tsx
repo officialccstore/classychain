@@ -27,8 +27,10 @@ interface Product {
   id: string;
   name: string;
   description: string;
+  mrp?: number;
   price: number;
   image: string;
+  images?: string[];
   brand: string;
   categoryId: string;
   subcategoryId?: string;
@@ -51,8 +53,10 @@ export default function AdminPage() {
   const [productForm, setProductForm] = useState({
     name: '',
     description: '',
+    mrp: '',
     price: '',
     image: '',
+    images: [] as string[],
     brand: '',
     categoryId: '',
     subcategoryId: '',
@@ -182,7 +186,7 @@ export default function AdminPage() {
 
     try {
       // Validate
-      if (!productForm.name || !productForm.price || !productForm.categoryId) {
+      if (!productForm.name || !productForm.mrp || !productForm.price || !productForm.categoryId) {
         setError('Please fill in all required fields');
         setIsLoading(false);
         return;
@@ -196,6 +200,7 @@ export default function AdminPage() {
 
       const payload = {
         ...productForm,
+        mrp: parseFloat(productForm.mrp),
         price: parseFloat(productForm.price),
         sizeVariants,
       };
@@ -218,7 +223,7 @@ export default function AdminPage() {
         throw new Error(errData.error || 'Failed to save product');
       }
 
-      // Reset form
+      // Reset formimages: [], 
       setProductForm({ name: '', description: '', price: '', image: '', brand: '', categoryId: '', subcategoryId: '' });
       setSizeVariants([{ size: '', quantity: 0 }]);
       setEditingProductId(null);
@@ -234,8 +239,8 @@ export default function AdminPage() {
   const handleEditProduct = (product: Product) => {
     setProductForm({
       name: product.name,
-      description: product.description,
-      price: product.price.toString(),
+      description: product.description,      mrp: product.mrp?.toString() || '',      price: product.price.toString(),
+      images: product.images || [],
       image: product.image,
       brand: product.brand || '',
       categoryId: product.categoryId,
@@ -428,17 +433,29 @@ export default function AdminPage() {
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
-                    <label className="block text-sm font-semibold mb-1">Price *</label>
+                    <label className="block text-sm font-semibold mb-1">MRP (Maximum Retail Price) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={productForm.mrp}
+                      onChange={(e) => setProductForm({ ...productForm, mrp: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., 5999"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Offer Price *</label>
                     <input
                       type="number"
                       step="0.01"
                       value={productForm.price}
                       onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                       className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., 4999"
                       required
                     />
                   </div>
-                  <div></div>
                 </div>
 
                 <div className="mb-4">
@@ -453,12 +470,12 @@ export default function AdminPage() {
 
                 <div className="mb-4">
                   <ImageUpload
-                    label="Product Image"
+                    label="Main Product Image"
                     currentImage={productForm.image}
                     onUploadComplete={(url) => setProductForm({ ...productForm, image: url })}
                   />
                   <div className="mt-2">
-                    <label className="block text-sm font-semibold mb-1">Or paste Image URL</label>
+                    <label className="block text-sm font-semibold mb-1">Or paste Main Image URL</label>
                     <input
                       type="url"
                       value={productForm.image}
@@ -466,6 +483,58 @@ export default function AdminPage() {
                       className="w-full border rounded px-3 py-2"
                       placeholder="https://..."
                     />
+                  </div>
+                </div>
+
+                {/* Additional Images */}
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold mb-3">Additional Images (Gallery)</h3>
+                  <div className="space-y-3">
+                    {(productForm.images || []).map((img, idx) => (
+                      <div key={idx} className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <ImageUpload
+                            label={`Image ${idx + 1}`}
+                            currentImage={img}
+                            onUploadComplete={(url) => {
+                              const updated = [...(productForm.images || [])];
+                              updated[idx] = url;
+                              setProductForm({ ...productForm, images: updated });
+                            }}
+                          />
+                          <input
+                            type="url"
+                            value={img}
+                            onChange={(e) => {
+                              const updated = [...(productForm.images || [])];
+                              updated[idx] = e.target.value;
+                              setProductForm({ ...productForm, images: updated });
+                            }}
+                            className="w-full border rounded px-3 py-2 mt-2"
+                            placeholder="Or paste image URL"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (productForm.images || []).filter((_, i) => i !== idx);
+                            setProductForm({ ...productForm, images: updated });
+                          }}
+                          className="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 mb-2"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProductForm({ ...productForm, images: [...(productForm.images || []), ''] });
+                      }}
+                      className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                    >
+                      + Add Image
+                    </button>
                   </div>
                 </div>
 
@@ -575,8 +644,10 @@ export default function AdminPage() {
                         setProductForm({
                           name: '',
                           description: '',
+                          mrp: '',
                           price: '',
                           image: '',
+                          images: [],
                           brand: '',
                           categoryId: '',
                           subcategoryId: '',

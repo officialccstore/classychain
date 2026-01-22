@@ -59,8 +59,10 @@ model Product {
   id              String        @id @default(auto()) @map("_id") @db.ObjectId
   name            String
   description     String
+  mrp             Float?
   price           Float
   image           String
+  images          String[]      @default([])
   categoryId      String        @db.ObjectId
   category        Category      @relation(fields: [categoryId], references: [id])
   subcategoryId   String?       @db.ObjectId

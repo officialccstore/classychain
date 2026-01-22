@@ -20,10 +20,11 @@ export async function PUT(request: Request, ctx: any) {
     const { id } = params
     const { sizeVariants, ...productData } = body
 
-    // Clean up empty subcategoryId
+    // Clean up empty subcategoryId and ensure images is an array
     const updateData = {
       ...productData,
-      subcategoryId: productData.subcategoryId || undefined
+      subcategoryId: productData.subcategoryId || undefined,
+      images: productData.images || []
     };
 
     // Update product and handle size variants separately

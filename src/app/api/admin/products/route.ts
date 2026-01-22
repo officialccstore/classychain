@@ -16,11 +16,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, description, price, image, categoryId, subcategoryId, brand, sizeVariants } = await request.json()
+    const { name, description, mrp, price, image, images, categoryId, subcategoryId, brand, sizeVariants } = await request.json()
 
-    if (!name || !price || !categoryId || !brand) {
+    if (!name || !mrp || !price || !categoryId || !brand) {
       return NextResponse.json(
-        { error: 'Name, price, category, and brand are required' },
+        { error: 'Name, MRP, price, category, and brand are required' },
         { status: 400 }
       )
     }
@@ -29,8 +29,10 @@ export async function POST(request: Request) {
       data: {
         name,
         description,
+        mrp,
         price,
         image,
+        images: images || [],
         categoryId,
         subcategoryId: subcategoryId || undefined, // Convert empty string to undefined
         brand,
