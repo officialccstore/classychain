@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ShoppingCart, User, Search, LogOut, Settings } from 'lucide-react'
 import { LogoWithText } from './Logo'
+import Nav from './Nav'
 
 interface UserData {
   id: string
@@ -19,6 +20,58 @@ export default function Header() {
   const [isLoading, setIsLoading] = useState(true)
   const [cartCount, setCartCount] = useState(0)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 })
+  const [activeCoupon, setActiveCoupon] = useState<{ code: string; percentage: number } | null>(null)
+
+  // Fetch active coupon
+  useEffect(() => {
+    const fetchActiveCoupon = async () => {
+      try {
+        const res = await fetch('/api/coupons?active=true&home=true')
+        if (res.ok) {
+          const coupons = await res.json()
+          if (coupons.length > 0) {
+            setActiveCoupon({
+              code: coupons[0].code,
+              percentage: coupons[0].percentage
+            })
+          } else {
+            setActiveCoupon(null)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch active coupon:', error)
+      }
+    }
+    
+    fetchActiveCoupon()
+    // Refresh coupon every 5 minutes
+    const interval = setInterval(fetchActiveCoupon, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Calculate time until midnight
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date()
+      const midnight = new Date()
+      midnight.setHours(24, 0, 0, 0)
+      
+      const difference = midnight.getTime() - now.getTime()
+      
+      const hours = Math.floor(difference / (1000 * 60 * 60))
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+      
+      setTimeLeft({ hours, minutes, seconds })
+    }
+
+    calculateTimeLeft()
+    const timer = setInterval(calculateTimeLeft, 1000)
+
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -89,6 +142,23 @@ export default function Header() {
     }
   }, [user])
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false)
+      }
+    }
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showUserMenu])
+
   // Hide header on login, register, and other auth pages
   const hideHeaderPaths = ['/login', '/register']
   if (hideHeaderPaths.includes(pathname)) {
@@ -104,21 +174,53 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 bg-white shadow z-50">
+      {/* Deal of the Day Banner */}
+      {activeCoupon && (
+        <div className="bg-gradient-to-r from-gray-700 to-gray-900 text-white py-2 px-4">
+          <div className="max-w-7xl mx-auto text-center">
+            <p className="text-xs sm:text-sm font-semibold">
+              🔥 Deal of the Day: Use code{' '}
+              <span className="bg-white text-gray-800 px-2 py-0.5 rounded font-bold mx-1">
+                {activeCoupon.code}
+              </span>{' '}
+              for {activeCoupon.percentage}% off | Ends in{' '}
+              <span className="inline-flex items-center gap-1 font-mono font-bold">
+                <span className="bg-black text-white px-1.5 py-0.5 rounded">{String(timeLeft.hours).padStart(2, '0')[0]}</span>
+                <span className="bg-black text-white px-1.5 py-0.5 rounded">{String(timeLeft.hours).padStart(2, '0')[1]}</span>
+                <span className="text-white">:</span>
+                <span className="bg-black text-white px-1.5 py-0.5 rounded">{String(timeLeft.minutes).padStart(2, '0')[0]}</span>
+                <span className="bg-black text-white px-1.5 py-0.5 rounded">{String(timeLeft.minutes).padStart(2, '0')[1]}</span>
+                <span className="text-white">:</span>
+                <span className="bg-black text-white px-1.5 py-0.5 rounded">{String(timeLeft.seconds).padStart(2, '0')[0]}</span>
+                <span className="bg-black text-white px-1.5 py-0.5 rounded">{String(timeLeft.seconds).padStart(2, '0')[1]}</span>
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Main Navigation */}
       <nav className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
+        {/* Empty spacer for layout balance */}
+        <div className="flex-1"></div>
+        
+        {/* Centered Logo */}
         <Link href="/" className="flex-shrink-0 hover:opacity-80 transition">
           <LogoWithText size="sm" variant="default" />
         </Link>
-        <div className="hidden sm:flex flex-1 mx-4">
-          <div className="flex items-center bg-gray-100 rounded-lg px-3 sm:px-4 py-2 w-full">
-            <Search className="w-4 sm:w-5 h-4 sm:h-5 text-gray-400 flex-shrink-0" />
+        
+        {/* Right side: Search, Cart, User */}
+        <div className="flex-1 flex items-center justify-end gap-3 sm:gap-4">
+          {/* Compact Search Bar */}
+          <div className="hidden sm:flex items-center bg-gray-100 rounded-lg px-3 py-1.5 w-40 lg:w-48">
+            <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
             <input
               type="text"
-              placeholder="Search shoes..."
+              placeholder="Search..."
               className="flex-1 bg-transparent outline-none ml-2 text-sm"
             />
           </div>
-        </div>
-        <div className="flex items-center gap-4 sm:gap-6">
+          
           <Link href="/cart" className="text-gray-600 hover:text-primary relative flex-shrink-0">
             <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
             {cartCount > 0 && (
@@ -129,7 +231,7 @@ export default function Header() {
           </Link>
 
           {!isLoading && user ? (
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-1 sm:gap-2 text-gray-600 hover:text-primary flex-shrink-0"
@@ -179,6 +281,9 @@ export default function Header() {
           )}
         </div>
       </nav>
+      
+      {/* Navigation Bar */}
+      <Nav />
     </header>
   )
 }

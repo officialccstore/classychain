@@ -6,6 +6,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const categoryId = searchParams.get('categoryId')
     const subcategoryId = searchParams.get('subcategoryId')
+    const family = searchParams.get('family')
+    const subfamilyId = searchParams.get('subfamilyId')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '12')
     const minPrice = searchParams.get('minPrice')
@@ -13,6 +15,17 @@ export async function GET(request: Request) {
     const sort = searchParams.get('sort')
 
     const where: any = {}
+    
+    // Filter by family through category->subfamily relation
+    if (family) {
+      where.category = { subfamily: { family } }
+    }
+    
+    // Filter by subfamily
+    if (subfamilyId) {
+      where.category = { ...where.category, subfamilyId }
+    }
+    
     if (categoryId) where.categoryId = categoryId
     if (subcategoryId) where.subcategoryId = subcategoryId
     if (minPrice || maxPrice) {

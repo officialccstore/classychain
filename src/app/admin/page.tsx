@@ -38,7 +38,7 @@ interface Product {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'products' | 'categories'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'subfamilies' | 'coupons'>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -58,6 +58,8 @@ export default function AdminPage() {
     image: '',
     images: [] as string[],
     brand: '',
+    family: '',
+    subfamilyId: '',
     categoryId: '',
     subcategoryId: '',
   });
@@ -66,8 +68,11 @@ export default function AdminPage() {
   ]);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
-  // Category form state
-  const [categoryForm, setCategoryForm] = useState({ name: '', isActive: true });
+  // Subfamily and Category form state
+  const [subfamilies, setSubfamilies] = useState<any[]>([]);
+  const [subfamilyForm, setSubfamilyForm] = useState({ name: '', family: 'men', isActive: true });
+  const [editingSubfamilyId, setEditingSubfamilyId] = useState<string | null>(null);
+  const [categoryForm, setCategoryForm] = useState({ name: '', subfamilyId: '', isActive: true });
   const [subcategoryForm, setSubcategoryForm] = useState({
     categoryId: '',
     name: '',
@@ -75,14 +80,43 @@ export default function AdminPage() {
   });
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
+  // Coupon form state
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [couponForm, setCouponForm] = useState({ code: '', percentage: '', validUntil: '', isHome: false });
+  const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
+
   // Fetch data
   useEffect(() => {
     fetchCategories();
+    fetchSubfamilies();
+    if (activeTab === 'coupons') fetchCoupons();
   }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'products') fetchProducts();
   }, [activeTab, page, selectedCategoryFilter, selectedSubcategoryFilter]);
+
+  const fetchSubfamilies = async () => {
+    try {
+      const res = await fetch('/api/subfamilies');
+      if (!res.ok) throw new Error('Failed to fetch subfamilies');
+      const data = await res.json();
+      setSubfamilies(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching subfamilies');
+    }
+  };
+
+  const fetchCoupons = async () => {
+    try {
+      const res = await fetch('/api/coupons');
+      if (!res.ok) throw new Error('Failed to fetch coupons');
+      const data = await res.json();
+      setCoupons(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching coupons');
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -223,8 +257,8 @@ export default function AdminPage() {
         throw new Error(errData.error || 'Failed to save product');
       }
 
-      // Reset formimages: [], 
-      setProductForm({ name: '', description: '', price: '', image: '', brand: '', categoryId: '', subcategoryId: '' });
+      // Reset form
+      setProductForm({ name: '', description: '', mrp: '', price: '', image: '', images: [], brand: '', family: '', subfamilyId: '', categoryId: '', subcategoryId: '' });
       setSizeVariants([{ size: '', quantity: 0 }]);
       setEditingProductId(null);
       fetchProducts();
@@ -237,12 +271,18 @@ export default function AdminPage() {
   };
 
   const handleEditProduct = (product: Product) => {
+    // Find category to get subfamily and family info
+    const category = categories.find(c => c.id === product.categoryId);
     setProductForm({
       name: product.name,
-      description: product.description,      mrp: product.mrp?.toString() || '',      price: product.price.toString(),
+      description: product.description,
+      mrp: product.mrp?.toString() || '',
+      price: product.price.toString(),
       images: product.images || [],
       image: product.image,
       brand: product.brand || '',
+      family: category?.subfamily?.family || '',
+      subfamilyId: category?.subfamilyId || '',
       categoryId: product.categoryId,
       subcategoryId: product.subcategoryId || '',
     });
@@ -279,6 +319,12 @@ export default function AdminPage() {
         return;
       }
 
+      if (!categoryForm.subfamilyId) {
+        setError('Please select a subfamily');
+        setIsLoading(false);
+        return;
+      }
+
       const token = localStorage.getItem('token');
       const res = await fetch('/api/categories', {
         method: 'POST',
@@ -294,7 +340,7 @@ export default function AdminPage() {
         throw new Error(errData.error || 'Failed to create category');
       }
 
-      setCategoryForm({ name: '', isActive: true });
+      setCategoryForm({ name: '', subfamilyId: '', isActive: true });
       fetchCategories();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creating category');
@@ -371,6 +417,171 @@ export default function AdminPage() {
     }
   };
 
+  // Subfamily handlers
+  const handleSubfamilySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      if (!subfamilyForm.name.trim()) {
+        setError('Subfamily name is required');
+        setIsLoading(false);
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const url = editingSubfamilyId 
+        ? `/api/subfamilies/${editingSubfamilyId}` 
+        : '/api/subfamilies';
+      const method = editingSubfamilyId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(subfamilyForm),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to save subfamily');
+      }
+
+      setSubfamilyForm({ name: '', family: 'men', isActive: true });
+      setEditingSubfamilyId(null);
+      fetchSubfamilies();
+      fetchCategories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error saving subfamily');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditSubfamily = (subfamily: any) => {
+    setSubfamilyForm({
+      name: subfamily.name,
+      family: subfamily.family,
+      isActive: subfamily.isActive,
+    });
+    setEditingSubfamilyId(subfamily.id);
+  };
+
+  const handleDeleteSubfamily = async (subfamilyId: string) => {
+    if (!confirm('Are you sure? This will unlink all categories from this subfamily.')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/subfamilies/${subfamilyId}`, { 
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error('Failed to delete subfamily');
+      fetchSubfamilies();
+      fetchCategories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error deleting subfamily');
+    }
+  };
+
+  const handleCancelSubfamilyEdit = () => {
+    setSubfamilyForm({ name: '', family: 'men', isActive: true });
+    setEditingSubfamilyId(null);
+  };
+
+  // Coupon handlers
+  const handleCouponSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      if (!couponForm.code.trim() || !couponForm.percentage || !couponForm.validUntil) {
+        setError('All fields are required');
+        setIsLoading(false);
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const url = editingCouponId ? `/api/coupons/${editingCouponId}` : '/api/coupons';
+      const method = editingCouponId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(couponForm),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to save coupon');
+      }
+
+      setCouponForm({ code: '', percentage: '', validUntil: '', isHome: false });
+      setEditingCouponId(null);
+      fetchCoupons();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error saving coupon');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditCoupon = (coupon: any) => {
+    setCouponForm({
+      code: coupon.code,
+      percentage: coupon.percentage.toString(),
+      validUntil: new Date(coupon.validUntil).toISOString().split('T')[0],
+      isHome: coupon.isHome || false,
+    });
+    setEditingCouponId(coupon.id);
+  };
+
+  const handleToggleCoupon = async (couponId: string, isActive: boolean) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/coupons/${couponId}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ isActive: !isActive }),
+      });
+      if (!res.ok) throw new Error('Failed to toggle coupon');
+      fetchCoupons();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error toggling coupon');
+    }
+  };
+
+  const handleDeleteCoupon = async (couponId: string) => {
+    if (!confirm('Are you sure you want to delete this coupon?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/coupons/${couponId}`, { 
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error('Failed to delete coupon');
+      fetchCoupons();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error deleting coupon');
+    }
+  };
+
+  const handleCancelCouponEdit = () => {
+    setCouponForm({ code: '', percentage: '', validUntil: '', isHome: false });
+    setEditingCouponId(null);
+  };
+
   const isOutOfStock = (variants: SizeVariant[] | undefined) => {
     return !variants || variants.length === 0 || variants.every((v) => v.quantity === 0);
   };
@@ -392,10 +603,22 @@ export default function AdminPage() {
               Products
             </button>
             <button
+              onClick={() => setActiveTab('subfamilies')}
+              className={`pb-2 px-4 font-semibold ${activeTab === 'subfamilies' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
+            >
+              Subfamilies
+            </button>
+            <button
               onClick={() => setActiveTab('categories')}
               className={`pb-2 px-4 font-semibold ${activeTab === 'categories' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
             >
               Categories
+            </button>
+            <button
+              onClick={() => setActiveTab('coupons')}
+              className={`pb-2 px-4 font-semibold ${activeTab === 'coupons' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
+            >
+              Coupons
             </button>
           </div>
 
@@ -540,6 +763,56 @@ export default function AdminPage() {
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
+                    <label className="block text-sm font-semibold mb-1">Family *</label>
+                    <select
+                      value={productForm.family}
+                      onChange={(e) =>
+                        setProductForm({
+                          ...productForm,
+                          family: e.target.value,
+                          subfamilyId: '',
+                          categoryId: '',
+                          subcategoryId: '',
+                        })
+                      }
+                      className="w-full border rounded px-3 py-2"
+                      required
+                    >
+                      <option value="">Select Family</option>
+                      <option value="men">Men</option>
+                      <option value="women">Women</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Subfamily *</label>
+                    <select
+                      value={productForm.subfamilyId}
+                      onChange={(e) =>
+                        setProductForm({
+                          ...productForm,
+                          subfamilyId: e.target.value,
+                          categoryId: '',
+                          subcategoryId: '',
+                        })
+                      }
+                      className="w-full border rounded px-3 py-2"
+                      required
+                      disabled={!productForm.family}
+                    >
+                      <option value="">Select Subfamily</option>
+                      {subfamilies
+                        .filter((sf) => sf.family === productForm.family)
+                        .map((subfamily) => (
+                          <option key={subfamily.id} value={subfamily.id}>
+                            {subfamily.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
                     <label className="block text-sm font-semibold mb-1">Category *</label>
                     <select
                       value={productForm.categoryId}
@@ -552,13 +825,16 @@ export default function AdminPage() {
                       }
                       className="w-full border rounded px-3 py-2"
                       required
+                      disabled={!productForm.subfamilyId}
                     >
                       <option value="">Select Category</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
+                      {categories
+                        .filter((cat) => cat.subfamilyId === productForm.subfamilyId)
+                        .map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
                     </select>
                   </div>
                   <div>
@@ -567,6 +843,7 @@ export default function AdminPage() {
                       value={productForm.subcategoryId}
                       onChange={(e) => setProductForm({ ...productForm, subcategoryId: e.target.value })}
                       className="w-full border rounded px-3 py-2"
+                      disabled={!productForm.categoryId}
                     >
                       <option value="">Select Subcategory (Optional)</option>
                       {categories
@@ -777,6 +1054,156 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* Subfamilies Tab */}
+          {activeTab === 'subfamilies' && (
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Manage Subfamilies</h2>
+
+              {/* Create/Edit Subfamily Form */}
+              <form onSubmit={handleSubfamilySubmit} className="mb-8 bg-gray-50 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">
+                  {editingSubfamilyId ? 'Edit Subfamily' : 'Create New Subfamily'}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <input
+                    type="text"
+                    value={subfamilyForm.name}
+                    onChange={(e) => setSubfamilyForm({ ...subfamilyForm, name: e.target.value })}
+                    placeholder="Subfamily name (e.g., Footwear, Bags & Accessories)"
+                    className="border rounded px-3 py-2"
+                    required
+                  />
+                  <select
+                    value={subfamilyForm.family}
+                    onChange={(e) => setSubfamilyForm({ ...subfamilyForm, family: e.target.value })}
+                    className="border rounded px-3 py-2"
+                    required
+                  >
+                    <option value="men">Men</option>
+                    <option value="women">Women</option>
+                  </select>
+                </div>
+                <div className="flex gap-2 items-center mb-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={subfamilyForm.isActive}
+                      onChange={(e) => setSubfamilyForm({ ...subfamilyForm, isActive: e.target.checked })}
+                    />
+                    <span className="text-sm">Active</span>
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+                  >
+                    {isLoading ? 'Saving...' : editingSubfamilyId ? 'Update Subfamily' : 'Create Subfamily'}
+                  </button>
+                  {editingSubfamilyId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelSubfamilyEdit}
+                      className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {/* Subfamilies List */}
+              <div className="bg-white rounded-lg shadow">
+                <h3 className="text-lg font-semibold p-4 border-b">Subfamilies</h3>
+                
+                {/* Men's Subfamilies */}
+                <div className="p-4 border-b bg-blue-50">
+                  <h4 className="font-semibold text-lg mb-2">Men</h4>
+                  <div className="space-y-2">
+                    {subfamilies
+                      .filter((sf) => sf.family === 'men')
+                      .map((subfamily) => (
+                        <div
+                          key={subfamily.id}
+                          className="bg-white p-4 rounded border flex justify-between items-center"
+                        >
+                          <div>
+                            <span className="font-medium">{subfamily.name}</span>
+                            <span className={`ml-3 text-sm ${subfamily.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                              {subfamily.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            <span className="ml-3 text-sm text-gray-500">
+                              ({subfamily.categories?.length || 0} categories)
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditSubfamily(subfamily)}
+                              className="text-blue-600 hover:underline text-sm"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSubfamily(subfamily.id)}
+                              className="text-red-600 hover:underline text-sm"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {subfamilies.filter((sf) => sf.family === 'men').length === 0 && (
+                      <p className="text-gray-500 text-sm">No subfamilies for Men</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Women's Subfamilies */}
+                <div className="p-4 bg-pink-50">
+                  <h4 className="font-semibold text-lg mb-2">Women</h4>
+                  <div className="space-y-2">
+                    {subfamilies
+                      .filter((sf) => sf.family === 'women')
+                      .map((subfamily) => (
+                        <div
+                          key={subfamily.id}
+                          className="bg-white p-4 rounded border flex justify-between items-center"
+                        >
+                          <div>
+                            <span className="font-medium">{subfamily.name}</span>
+                            <span className={`ml-3 text-sm ${subfamily.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                              {subfamily.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            <span className="ml-3 text-sm text-gray-500">
+                              ({subfamily.categories?.length || 0} categories)
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditSubfamily(subfamily)}
+                              className="text-blue-600 hover:underline text-sm"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSubfamily(subfamily.id)}
+                              className="text-red-600 hover:underline text-sm"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {subfamilies.filter((sf) => sf.family === 'women').length === 0 && (
+                      <p className="text-gray-500 text-sm">No subfamilies for Women</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Categories Tab */}
           {activeTab === 'categories' && (
             <div>
@@ -785,15 +1212,30 @@ export default function AdminPage() {
               {/* Create Category Form */}
               <form onSubmit={handleCreateCategory} className="mb-8 bg-gray-50 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold mb-4">Create New Category</h3>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <input
                     type="text"
                     value={categoryForm.name}
                     onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
                     placeholder="Category name"
-                    className="flex-1 border rounded px-3 py-2"
+                    className="border rounded px-3 py-2"
                     required
                   />
+                  <select
+                    value={categoryForm.subfamilyId}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, subfamilyId: e.target.value })}
+                    className="border rounded px-3 py-2"
+                    required
+                  >
+                    <option value="">Select Subfamily</option>
+                    {subfamilies.map((subfamily) => (
+                      <option key={subfamily.id} value={subfamily.id}>
+                        {subfamily.name} ({subfamily.family})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2 items-center">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -805,7 +1247,7 @@ export default function AdminPage() {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 ml-auto"
                   >
                     {isLoading ? 'Creating...' : 'Create'}
                   </button>
@@ -877,6 +1319,9 @@ export default function AdminPage() {
                             <h4 className="font-semibold">{category.name}</h4>
                             <p className="text-xs text-gray-500">
                               {category.subcategories?.length || 0} subcategories
+                              {category.subfamily && (
+                                <span> • <span className="capitalize font-medium">{category.subfamily.name} ({category.subfamily.family})</span></span>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -920,6 +1365,168 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Coupons Tab */}
+          {activeTab === 'coupons' && (
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Manage Coupons</h2>
+
+              {/* Create/Edit Coupon Form */}
+              <form onSubmit={handleCouponSubmit} className="mb-8 bg-gray-50 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">
+                  {editingCouponId ? 'Edit Coupon' : 'Create New Coupon'}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Coupon Code *</label>
+                    <input
+                      type="text"
+                      value={couponForm.code}
+                      onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
+                      placeholder="e.g., DAILY50"
+                      className="w-full border rounded px-3 py-2 uppercase"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Discount Percentage *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={couponForm.percentage}
+                      onChange={(e) => setCouponForm({ ...couponForm, percentage: e.target.value })}
+                      placeholder="e.g., 50"
+                      className="w-full border rounded px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Valid Until *</label>
+                    <input
+                      type="date"
+                      value={couponForm.validUntil}
+                      onChange={(e) => setCouponForm({ ...couponForm, validUntil: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={couponForm.isHome}
+                      onChange={(e) => setCouponForm({ ...couponForm, isHome: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm font-semibold">Show on Homepage Banner</span>
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+                  >
+                    {isLoading ? 'Saving...' : editingCouponId ? 'Update Coupon' : 'Create Coupon'}
+                  </button>
+                  {editingCouponId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelCouponEdit}
+                      className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {/* Coupons List */}
+              <div className="bg-white rounded-lg shadow">
+                <h3 className="text-lg font-semibold p-4 border-b">All Coupons</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Code</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Discount</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valid Until</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Homepage</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {coupons.map((coupon) => {
+                        const isExpired = new Date(coupon.validUntil) < new Date();
+                        const isValid = coupon.isActive && !isExpired;
+                        return (
+                          <tr key={coupon.id} className={isValid ? '' : 'bg-gray-50'}>
+                            <td className="px-4 py-3">
+                              <span className="font-mono font-bold text-blue-600">{coupon.code}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-semibold text-green-600">{coupon.percentage}% OFF</span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {new Date(coupon.validUntil).toLocaleDateString()}
+                              {isExpired && <span className="ml-2 text-red-600 font-semibold">(Expired)</span>}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                coupon.isHome
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {coupon.isHome ? '✓ Yes' : '✗ No'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => handleToggleCoupon(coupon.id, coupon.isActive)}
+                                className={`px-3 py-1 rounded text-xs font-semibold ${
+                                  coupon.isActive
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {coupon.isActive ? 'Active' : 'Inactive'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleEditCoupon(coupon)}
+                                  className="text-blue-600 hover:underline text-sm"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCoupon(coupon.id)}
+                                  className="text-red-600 hover:underline text-sm"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {coupons.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                            No coupons found. Create your first coupon above.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -38,15 +38,16 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const { name, isActive } = await request.json()
+    const { name, subfamilyId, isActive } = await request.json()
 
     const category = await prisma.category.update({
       where: { id },
       data: {
         ...(name && { name }),
+        ...(subfamilyId && { subfamily: { connect: { id: subfamilyId } } }),
         ...(isActive !== undefined && { isActive })
       },
-      include: { subcategories: true }
+      include: { subcategories: true, subfamily: true }
     })
 
     return NextResponse.json(category)

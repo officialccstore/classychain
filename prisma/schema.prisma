@@ -30,9 +30,22 @@ model User {
   addresses Address[]
 }
 
+model Subfamily {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  family        String         // men or women
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  categories    Category[]
+}
+
 model Category {
   id            String         @id @default(auto()) @map("_id") @db.ObjectId
   name          String         @unique
+  subfamilyId   String?        @db.ObjectId
+  subfamily     Subfamily?     @relation(fields: [subfamilyId], references: [id], onDelete: SetNull)
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -164,4 +177,16 @@ model Review {
   comment   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Coupon {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  code        String   @unique
+  percentage  Int      // Discount percentage
+  isActive    Boolean  @default(true)
+  isHome      Boolean  @default(false)
+  validFrom   DateTime @default(now())
+  validUntil  DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

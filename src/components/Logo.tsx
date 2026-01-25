@@ -39,11 +39,8 @@ export function LogoWithText({ size = 'md', variant = 'default' }: { size?: 'sm'
 
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-      <div className={`${colorTextClasses[variant]} font-black tracking-tight ${textSizeClasses[size]}`}>
-        ClassyChain
-      </div>
-      <div className={`${taglineSizeClasses[size]} opacity-60 ${colorTextClasses[variant]} font-medium tracking-widest`}>
-        PREMIUM FOOTWEAR
+      <div className={`${colorTextClasses[variant]} font-black tracking-tight ${textSizeClasses[size]}`} style={{ fontFamily: '"Zalando Sans Expanded", sans-serif', fontOpticalSizing: 'auto' }}>
+        CLASSY CHAIN
       </div>
     </div>
   )

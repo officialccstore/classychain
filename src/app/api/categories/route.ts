@@ -8,7 +8,8 @@ export async function GET(request: Request) {
       include: {
         subcategories: {
           where: { isActive: true }
-        }
+        },
+        subfamily: true
       },
       orderBy: { createdAt: 'asc' }
     })
@@ -21,15 +22,23 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { name } = await request.json()
+    const { name, subfamilyId } = await request.json()
 
     if (!name || name.trim().length === 0) {
       return NextResponse.json({ error: 'Category name is required' }, { status: 400 })
     }
 
+    if (!subfamilyId) {
+      return NextResponse.json({ error: 'Subfamily is required' }, { status: 400 })
+    }
+
     const category = await prisma.category.create({
-      data: { name: name.trim(), isActive: true },
-      include: { subcategories: true }
+      data: { 
+        name: name.trim(), 
+        subfamily: { connect: { id: subfamilyId } },
+        isActive: true 
+      },
+      include: { subcategories: true, subfamily: true }
     })
 
     return NextResponse.json(category, { status: 201 })

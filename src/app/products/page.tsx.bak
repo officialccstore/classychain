@@ -42,12 +42,10 @@ function ProductsPageContent() {
   })
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([])
   const [selectedFamily, setSelectedFamily] = useState<string>('') // 'men' or 'women' or ''
-  const [selectedSubfamily, setSelectedSubfamily] = useState<string>('') // subfamily ID
   const [priceRange, setPriceRange] = useState([0, 40000])
   const [sortBy, setSortBy] = useState('featured')
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
-  const [subfamilies, setSubfamilies] = useState<any[]>([])
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [addingId, setAddingId] = useState<string | null>(null)
 
@@ -68,20 +66,7 @@ function ProductsPageContent() {
         console.error('Failed to fetch categories:', error)
       }
     }
-    
-    // Fetch subfamilies
-    const fetchSubfamilies = async () => {
-      try {
-        const res = await fetch('/api/subfamilies')
-        const data = await res.json()
-        setSubfamilies(data)
-      } catch (error) {
-        console.error('Failed to fetch subfamilies:', error)
-      }
-    }
-    
     fetchCategories()
-    fetchSubfamilies()
   }, [])
 
   const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
@@ -145,9 +130,10 @@ function ProductsPageContent() {
         params.append('page', String(page))
         params.append('limit', '12')
         if (selectedFamily) params.append('family', selectedFamily)
-        if (selectedSubfamily) params.append('subfamilyId', selectedSubfamily)
         if (selectedCategories.length > 0) params.append('categoryId', selectedCategories[0])
         if (selectedSubcategories.length > 0) params.append('subcategoryId', selectedSubcategories[0])
+        if (priceRange[0] > 0) params.append('minPrice', String(priceRange[0]))
+        if (priceRange[1] < 40000) params.append('maxPrice', String(priceRange[1]))
         if (sortBy) params.append('sort', sortBy)
 
         const url = `/api/products?${params.toString()}`
@@ -182,26 +168,20 @@ function ProductsPageContent() {
     }
 
     fetchProducts()
-  }, [selectedCategories, selectedSubcategories, selectedFamily, selectedSubfamily, page, priceRange, sortBy])
+  }, [selectedCategories, selectedSubcategories, selectedFamily, page, priceRange, sortBy])
 
   const handleCategoryChange = (categoryId: string) => {
     setSelectedCategories(prev => (prev.includes(categoryId) ? prev.filter(c => c !== categoryId) : [categoryId]))
     setSelectedSubcategories([])
+    setProducts([])
     setPage(1)
   }
 
   const handleFamilyChange = (family: string) => {
     setSelectedFamily(family === selectedFamily ? '' : family)
-    setSelectedSubfamily('')
     setSelectedCategories([])
     setSelectedSubcategories([])
-    setPage(1)
-  }
-
-  const handleSubfamilyChange = (subfamilyId: string) => {
-    setSelectedSubfamily(subfamilyId === selectedSubfamily ? '' : subfamilyId)
-    setSelectedCategories([])
-    setSelectedSubcategories([])
+    setProducts([])
     setPage(1)
   }
 
@@ -211,6 +191,7 @@ function ProductsPageContent() {
         ? prev.filter(s => s !== subcategoryId)
         : [subcategoryId]
     )
+    setProducts([])
     setPage(1)
   }
 
@@ -220,6 +201,7 @@ function ProductsPageContent() {
 
   const filteredProducts = products && Array.isArray(products)
     ? products
+        .filter(p => priceRange[0] <= p.price && p.price <= priceRange[1])
         .sort((a, b) => {
           if (sortBy === 'price-low') return a.price - b.price
           if (sortBy === 'price-high') return b.price - a.price
@@ -301,7 +283,7 @@ function ProductsPageContent() {
                   </label>
                   {selectedFamily && (
                     <button
-                      onClick={() => handleFamilyChange('')}
+                      onClick(() => handleFamilyChange('')}
                       className="text-sm text-blue-600 hover:text-blue-800 transition"
                     >
                       Clear selection
@@ -310,48 +292,13 @@ function ProductsPageContent() {
                 </div>
               </div>
 
-              {/* Subfamily Filter */}
-              {selectedFamily && (
-                <div>
-                  <h3 className="text-lg font-bold mb-4 text-black">SHOP BY</h3>
-                  <div className="space-y-3">
-                    {subfamilies
-                      .filter(sf => sf.family === selectedFamily && sf.isActive)
-                      .map(subfamily => (
-                        <label key={subfamily.id} className="flex items-center cursor-pointer">
-                          <input
-                            type="radio"
-                            name="subfamily"
-                            checked={selectedSubfamily === subfamily.id}
-                            onChange={() => handleSubfamilyChange(subfamily.id)}
-                            className="w-4 h-4 border-gray-300"
-                          />
-                          <span className="ml-3 text-gray-700 hover:text-black transition">{subfamily.name}</span>
-                        </label>
-                      ))}
-                    {selectedSubfamily && (
-                      <button
-                        onClick={() => handleSubfamilyChange('')}
-                        className="text-sm text-blue-600 hover:text-blue-800 transition"
-                      >
-                        Clear selection
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* Categories Filter */}
               <div>
                 <h3 className="text-lg font-bold mb-4 text-black">CATEGORIES</h3>
                 <div className="space-y-3">
                   {categories && categories.length > 0 ? (
                     categories
-                      .filter(category => {
-                        if (selectedSubfamily) return category.subfamilyId === selectedSubfamily
-                        if (selectedFamily) return category.subfamily?.family === selectedFamily
-                        return true
-                      })
+                      .filter(category => !selectedFamily || category.family === selectedFamily)
                       .map(category => (
                       <label key={category.id} className="flex items-center cursor-pointer">
                         <input
@@ -392,7 +339,7 @@ function ProductsPageContent() {
               )}
 
               {/* Price Filter */}
-              {/* <div>
+              <div>
                 <h3 className="text-lg font-bold mb-4 text-black">PRICE RANGE</h3>
                 <div className="space-y-4">
                   <input
@@ -409,7 +356,7 @@ function ProductsPageContent() {
                     <span className="text-sm font-semibold">₹{priceRange[1]}</span>
                   </div>
                 </div>
-              </div> */}
+              </div>
 
               {/* Apply Button */}
               <button
@@ -454,7 +401,7 @@ function ProductsPageContent() {
                   </label>
                   {selectedFamily && (
                     <button
-                      onClick={() => handleFamilyChange('')}
+                      onClick={() => handleFamilyChange(''))
                       className="text-sm text-blue-600 hover:text-blue-800 transition"
                     >
                       Clear selection
@@ -463,48 +410,13 @@ function ProductsPageContent() {
                 </div>
               </div>
 
-              {/* Subfamily Filter */}
-              {selectedFamily && (
-                <div>
-                  <h3 className="text-lg font-bold mb-4 text-black">SHOP BY</h3>
-                  <div className="space-y-3">
-                    {subfamilies
-                      .filter(sf => sf.family === selectedFamily && sf.isActive)
-                      .map(subfamily => (
-                        <label key={subfamily.id} className="flex items-center cursor-pointer">
-                          <input
-                            type="radio"
-                            name="subfamily-desktop"
-                            checked={selectedSubfamily === subfamily.id}
-                            onChange={() => handleSubfamilyChange(subfamily.id)}
-                            className="w-4 h-4 border-gray-300"
-                          />
-                          <span className="ml-3 text-gray-700 hover:text-black transition">{subfamily.name}</span>
-                        </label>
-                      ))}
-                    {selectedSubfamily && (
-                      <button
-                        onClick={() => handleSubfamilyChange('')}
-                        className="text-sm text-blue-600 hover:text-blue-800 transition"
-                      >
-                        Clear selection
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* Categories Filter */}
               <div>
                 <h3 className="text-lg font-bold mb-4 text-black">CATEGORIES</h3>
                 <div className="space-y-3">
                   {categories && categories.length > 0 ? (
                     categories
-                      .filter(category => {
-                        if (selectedSubfamily) return category.subfamilyId === selectedSubfamily
-                        if (selectedFamily) return category.subfamily?.family === selectedFamily
-                        return true
-                      })
+                      .filter(category => !selectedFamily || category.family === selectedFamily)
                       .map(category => (
                       <label key={category.id} className="flex items-center cursor-pointer">
                         <input
@@ -545,7 +457,7 @@ function ProductsPageContent() {
               )}
 
               {/* Price Filter */}
-              {/* <div>
+              <div>
                 <h3 className="text-lg font-bold mb-4 text-black">PRICE RANGE</h3>
                 <div className="space-y-4">
                   <input
@@ -562,7 +474,7 @@ function ProductsPageContent() {
                     <span className="text-sm font-semibold">₹{priceRange[1]}</span>
                   </div>
                 </div>
-              </div> */}
+              </div>
             </div>
           </div>
 
@@ -613,7 +525,7 @@ function ProductsPageContent() {
                   <Link key={product.id} href={`/products/${product.id}`}>
                     <div className="group cursor-pointer">
                       {/* Image */}
-                      <div className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
+                      <div className="relative h-80 bg-gray-100 rounded-lg overflow-hidden mb-4">
                         {product.image ? (
                           <img
                             src={product.image}
@@ -638,6 +550,7 @@ function ProductsPageContent() {
                         <h3 className="text-lg font-bold text-black group-hover:text-yellow-500 transition line-clamp-2">
                           {product.name}
                         </h3>
+                        <p className="text-sm text-gray-600">{product.description}</p>
 
                         {/* Availability */}
                         <div className="flex items-center gap-2">
@@ -649,7 +562,7 @@ function ProductsPageContent() {
                         </div>
 
                         {/* Price & CTA */}
-                        <div className="pt-3 flex items-start justify-between gap-3">
+                        <div className="pt-3 flex items-center justify-between gap-3">
                           <div className="flex-1">
                             {product.mrp && product.mrp > product.price && (
                               <div className="flex items-center gap-2 mb-1">
@@ -663,21 +576,21 @@ function ProductsPageContent() {
                             )}
                             <div className="flex items-baseline gap-1">
                               <p className="text-xs text-green-600 font-semibold uppercase">Offer</p>
-                              <span className="text-lg sm:text-2xl font-black text-green-600">
+                              <span className="text-2xl font-black text-green-600">
                                 ₹{product.price.toLocaleString('en-IN')}
                               </span>
                             </div>
                           </div>
                           <button
-                            className="flex-shrink-0 text-black p-2 rounded-full hover:bg-gray-100 transition disabled:opacity-60 border-2 border-gray-200 hover:border-black mt-1"
+                            className="flex-shrink-0 text-black p-2.5 rounded-full hover:bg-gray-100 transition disabled:opacity-60 border-2 border-gray-200 hover:border-black"
                             disabled={addingId === String(product.id)}
                             onClick={(e) => handleAddToCart(e, product)}
                             title="Add to Cart"
                           >
                             {addingId === String(product.id) ? (
-                              <span className="h-5 w-5 border-2 border-gray-400 border-t-black rounded-full animate-spin" />
+                              <span className="h-6 w-6 border-2 border-gray-400 border-t-black rounded-full animate-spin" />
                             ) : (
-                              <ShoppingCart className="w-5 h-5 stroke-[2.5]" />
+                              <ShoppingCart className="w-6 h-6 stroke-[2.5]" />
                             )}
                           </button>
                         </div>
