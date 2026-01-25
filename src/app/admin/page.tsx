@@ -13,7 +13,13 @@ interface Category {
   id: string;
   name: string;
   isActive: boolean;
+  subfamilyId?: string;
   subcategories?: Subcategory[];
+  subfamily?: {
+    id: string;
+    name: string;
+    family: string;
+  };
 }
 
 interface Subcategory {
@@ -926,6 +932,8 @@ export default function AdminPage() {
                           image: '',
                           images: [],
                           brand: '',
+                          family: '',
+                          subfamilyId: '',
                           categoryId: '',
                           subcategoryId: '',
                         });

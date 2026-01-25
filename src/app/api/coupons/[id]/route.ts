@@ -3,11 +3,12 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const coupon = await prisma.coupon.findUnique({
-      where: { id: params.id }
+      where: { id }
     })
     
     if (!coupon) {
@@ -23,9 +24,10 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const { code, percentage, validUntil, isActive, isHome } = await request.json()
     
     const updateData: any = {}
@@ -48,7 +50,7 @@ export async function PUT(
         await prisma.coupon.updateMany({
           where: { 
             isHome: true,
-            NOT: { id: params.id }
+            NOT: { id }
           },
           data: { isHome: false }
         })
@@ -56,7 +58,7 @@ export async function PUT(
     }
     
     const coupon = await prisma.coupon.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData
     })
     
@@ -75,11 +77,12 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     await prisma.coupon.delete({
-      where: { id: params.id }
+      where: { id }
     })
     
     return NextResponse.json({ message: 'Coupon deleted successfully' })
