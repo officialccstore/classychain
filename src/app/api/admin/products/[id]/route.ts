@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { getTokenFromReq, verifyToken } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
@@ -9,14 +9,17 @@ function isAdminFromReq(req: any) {
   return payload && payload.role === 'admin'
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
-    const { id } = params
+    const { id } = await params
     const { sizeVariants, ...productData } = body
 
     // Remove any fields not present on the Prisma Product model (e.g. `family`, `subfamilyId`)
@@ -88,13 +91,16 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     await prisma.product.delete({
       where: { id },
