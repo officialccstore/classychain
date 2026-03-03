@@ -9,8 +9,7 @@ function isAdminFromReq(req: any) {
   return payload && payload.role === 'admin'
 }
 
-export async function PUT(request: Request, ctx: any) {
-  const { params } = ctx
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -20,11 +19,21 @@ export async function PUT(request: Request, ctx: any) {
     const { id } = params
     const { sizeVariants, ...productData } = body
 
+    // Remove any fields not present on the Prisma Product model (e.g. `family`, `subfamilyId`)
+    if ('family' in productData) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (productData as any).family
+    }
+    if ('subfamilyId' in productData) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (productData as any).subfamilyId
+    }
+
     // Clean up empty subcategoryId and ensure images is an array
     const updateData = {
       ...productData,
       subcategoryId: productData.subcategoryId || undefined,
-      images: productData.images || []
+      images: Array.isArray(productData.images) ? productData.images : (productData.images ? [productData.images] : [])
     };
 
     // Update product and handle size variants separately
@@ -79,8 +88,7 @@ export async function PUT(request: Request, ctx: any) {
   }
 }
 
-export async function DELETE(request: Request, ctx: any) {
-  const { params } = ctx
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
