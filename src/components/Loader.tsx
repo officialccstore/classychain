@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 
 export default function Loader() {
+  const pathname = usePathname()
   const [isVisible, setIsVisible] = useState(true)
 
   useEffect(() => {
@@ -14,6 +16,7 @@ export default function Loader() {
     return () => clearTimeout(timer)
   }, [])
 
+  if (pathname?.startsWith('/admin')) return null
   if (!isVisible) return null
 
   return (

@@ -121,8 +121,7 @@ export default function CartPage() {
   }
 
   const subtotal = cartItems.reduce((s, it) => s + it.product.price * it.quantity, 0)
-  const tax = subtotal * 0.08
-  const total = subtotal + tax
+  const total = subtotal
 
   const handleCheckout = () => {
     if (!isLoggedIn) { router.push('/login?next=/checkout'); return }
@@ -253,10 +252,6 @@ export default function CartPage() {
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
                   <span className="font-semibold text-green-600">FREE</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Tax (8%)</span>
-                  <span className="font-semibold text-gray-900">₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 

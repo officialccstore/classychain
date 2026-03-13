@@ -144,6 +144,8 @@ export default function Header() {
 
   const pad = (n: number) => String(n).padStart(2, '0')
 
+  if (pathname?.startsWith('/admin')) return null
+
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
       {/* Coupon Banner */}

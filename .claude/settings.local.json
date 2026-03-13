@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat /Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/products/[id]/route.ts)",
+      "Bash(xargs ls:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

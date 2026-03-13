@@ -3,8 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle, LogIn, ShoppingBag } from 'lucide-react'
-import { LogoWithText } from '@/components/Logo'
+import { CheckCircle, LogIn, ShoppingBag, Tag, X } from 'lucide-react'
 
 interface CartItem {
   id: string
@@ -24,7 +23,40 @@ function CheckoutContent() {
   const isSuccess = searchParams.get('success') === 'true'
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [placing, setPlacing] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
+
+  const [couponCode, setCouponCode] = useState('')
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [couponError, setCouponError] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; percentage: number } | null>(null)
+
+  useEffect(() => {
+    const fetchCart = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const response = await fetch('/api/cart', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
+        const data = await response.json()
+        const normalized = Array.isArray(data) ? data : (data?.items || [])
+        setCartItems(normalized)
+      } catch (error) {
+        console.error('Failed to fetch cart:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    const token = localStorage.getItem('token')
+    setIsLoggedIn(!!token)
+    try {
+      const userData = localStorage.getItem('user')
+      if (userData) setUser(JSON.parse(userData))
+    } catch {}
+    fetchCart()
+  }, [])
 
   if (isSuccess) {
     return (
@@ -36,86 +68,132 @@ function CheckoutContent() {
             </div>
           </div>
           <h1 className="text-3xl font-black text-gray-900 mb-2">Order Placed!</h1>
-          <p className="text-gray-500 mb-8">Thank you for your purchase. We'll notify you when your order ships.</p>
-          <Link
-            href="/products"
-            className="inline-flex items-center gap-2 bg-black text-white px-8 py-3 rounded-lg font-bold hover:bg-gray-800 transition"
-          >
-            <ShoppingBag className="w-5 h-5" />
-            Continue Shopping
-          </Link>
+          <p className="text-gray-500 mb-8">Payment successful. We'll notify you when your order ships.</p>
+          <div className="flex flex-col gap-3">
+            <Link href="/profile" className="inline-flex items-center justify-center gap-2 bg-black text-white px-8 py-3 rounded-lg font-bold hover:bg-amber-400 hover:text-black transition">
+              View Order History
+            </Link>
+            <Link href="/products" className="inline-flex items-center justify-center gap-2 border border-gray-200 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:border-black transition text-sm">
+              <ShoppingBag className="w-4 h-4" />
+              Continue Shopping
+            </Link>
+          </div>
         </div>
       </div>
     )
   }
 
-  useEffect(() => {
-    const fetchCart = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        const response = await fetch('/api/cart', {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
-        const data = await response.json()
-        // Ensure we always set an array for cart items. API may return
-        // { error } or { items: [...] } in some cases — normalize it.
-        const normalized = Array.isArray(data) ? data : (data?.items || [])
-        setCartItems(normalized)
-      } catch (error) {
-        console.error('Failed to fetch cart:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    // Check if user is logged in
-    const token = localStorage.getItem('token')
-    setIsLoggedIn(!!token)
-
-    fetchCart()
-  }, [])
-
-  // Guard reduce in case cartItems is unexpectedly not an array at runtime.
-  const total = Array.isArray(cartItems)
+  const subtotal = Array.isArray(cartItems)
     ? cartItems.reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0)
     : 0
+  const discount = appliedCoupon ? subtotal * (appliedCoupon.percentage / 100) : 0
+  const total = subtotal - discount
 
-  const handleFinalizeCart = async () => {
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return
+    setCouponLoading(true)
+    setCouponError('')
+    try {
+      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode.trim())}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setCouponError(data.error || 'Invalid coupon')
+        setAppliedCoupon(null)
+      } else {
+        setAppliedCoupon(data)
+        setCouponError('')
+      }
+    } catch {
+      setCouponError('Failed to apply coupon. Try again.')
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCode('')
+    setCouponError('')
+  }
+
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) { resolve(true); return }
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+  }
+
+  const handlePayment = async () => {
     if (!isLoggedIn) {
-      // Save cart data to localStorage
       localStorage.setItem('pendingCart', JSON.stringify(cartItems))
-      try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
-      // Redirect to login
+      try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
       router.push('/login?redirect=/checkout&pendingCart=true')
       return
     }
 
-    // If logged in, proceed with order
+    setPlacing(true)
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          items: cartItems,
-          total: total * 1.08,
-        }),
-      });
+      const token = localStorage.getItem('token')
 
-      if (response.ok) {
-        // Clear cart after order
-        await fetch('/api/cart', { 
-          method: 'DELETE',
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
-        router.push('/checkout?success=true')
+      // Step 1: Create Razorpay order on server
+      const orderRes = await fetch('/api/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ amount: total }),
+      })
+      const orderData = await orderRes.json()
+      if (!orderRes.ok) throw new Error(orderData.error || 'Failed to initiate payment')
+
+      // Step 2: Load Razorpay checkout script
+      const loaded = await loadRazorpayScript()
+      if (!loaded) throw new Error('Failed to load Razorpay. Please check your internet connection.')
+
+      // Step 3: Open Razorpay payment modal
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'ClassyChain',
+        description: 'Shoe Purchase',
+        order_id: orderData.orderId,
+        prefill: { name: user?.name || '', email: user?.email || '' },
+        theme: { color: '#000000' },
+        handler: async (response: any) => {
+          // Step 4: Verify signature + create DB order
+          const verifyRes = await fetch('/api/razorpay/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              items: cartItems,
+              total,
+            }),
+          })
+          const verifyData = await verifyRes.json()
+          if (verifyRes.ok && verifyData.success) {
+            try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
+            router.push('/checkout?success=true')
+          } else {
+            alert(verifyData.error || 'Payment verification failed. Please contact support.')
+            setPlacing(false)
+          }
+        },
+        modal: {
+          ondismiss: () => setPlacing(false),
+        },
       }
-    } catch (error) {
-      console.error('Failed to place order:', error)
+
+      const rzp = new (window as any).Razorpay(options)
+      rzp.open()
+    } catch (error: any) {
+      alert(error.message || 'Something went wrong. Please try again.')
+      setPlacing(false)
     }
   }
 
@@ -145,13 +223,8 @@ function CheckoutContent() {
     )
   }
 
-  const subtotal = total
-  const tax = subtotal * 0.08
-  const grandTotal = subtotal + tax
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
           <p className="text-xs font-bold text-amber-500 uppercase tracking-widest mb-1">Almost there</p>
@@ -161,7 +234,7 @@ function CheckoutContent() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Items */}
+          {/* Items list */}
           <div className="lg:col-span-3 bg-white rounded-xl border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="font-black text-black uppercase tracking-wide text-sm">Items in Your Order</h2>
@@ -181,10 +254,11 @@ function CheckoutContent() {
             </div>
           </div>
 
-          {/* Summary + CTA */}
+          {/* Summary + payment */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-xl border border-gray-100 p-6">
               <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Price Details</h3>
+
               <div className="space-y-3 text-sm mb-5">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
@@ -194,15 +268,55 @@ function CheckoutContent() {
                   <span>Shipping</span>
                   <span className="font-semibold text-green-600">FREE</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Tax (8%)</span>
-                  <span className="font-semibold text-gray-900">₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({appliedCoupon.percentage}% off)</span>
+                    <span className="font-semibold">−₹{discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
               </div>
-              <div className="border-t border-gray-100 pt-4 flex justify-between items-center mb-6">
+
+              <div className="border-t border-gray-100 pt-4 flex justify-between items-center mb-5">
                 <span className="font-black text-black uppercase tracking-wide text-sm">Total</span>
-                <span className="font-black text-xl text-black">₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="font-black text-xl text-black">₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
+
+              {/* Coupon */}
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-5">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-bold text-green-700">{appliedCoupon.code}</span>
+                    <span className="text-xs text-green-600">({appliedCoupon.percentage}% off)</span>
+                  </div>
+                  <button onClick={handleRemoveCoupon} className="text-green-500 hover:text-red-500 transition">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="mb-5">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(e) => { setCouponCode(e.target.value); setCouponError('') }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                      placeholder="Coupon code"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-medium uppercase placeholder:normal-case placeholder:font-normal focus:outline-none focus:border-black transition"
+                    />
+                    <button
+                      onClick={handleApplyCoupon}
+                      disabled={couponLoading || !couponCode.trim()}
+                      className="px-4 py-2.5 bg-black text-white text-sm font-bold rounded-lg hover:bg-amber-400 hover:text-black transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      {couponLoading
+                        ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                        : 'Apply'}
+                    </button>
+                  </div>
+                  {couponError && <p className="text-xs text-red-500 mt-1.5 font-medium">{couponError}</p>}
+                </div>
+              )}
 
               {!isLoggedIn && (
                 <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
@@ -212,11 +326,21 @@ function CheckoutContent() {
               )}
 
               <button
-                onClick={handleFinalizeCart}
-                className="w-full flex items-center justify-center gap-2 bg-black text-white py-3.5 rounded-lg font-black text-sm uppercase tracking-wide hover:bg-amber-400 hover:text-black transition"
+                onClick={handlePayment}
+                disabled={placing}
+                className="w-full flex items-center justify-center gap-2 bg-black text-white py-3.5 rounded-lg font-black text-sm uppercase tracking-wide hover:bg-amber-400 hover:text-black transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isLoggedIn ? 'Place Order' : 'Sign In to Order'}
-                <CheckCircle className="w-4 h-4" />
+                {placing ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {isLoggedIn ? 'Pay Now' : 'Sign In to Pay'}
+                    <CheckCircle className="w-4 h-4" />
+                  </>
+                )}
               </button>
               <Link href="/cart" className="block text-center mt-3 text-xs text-gray-400 hover:text-black transition font-medium">
                 ← Back to Cart

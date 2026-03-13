@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import ImageUpload from '@/components/ImageUpload';
-import { Package, Tag, LayoutGrid, Ticket, ChevronDown, ChevronRight, Pencil, Trash2, Plus, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { Package, Tag, LayoutGrid, Ticket, ChevronDown, ChevronRight, Pencil, Trash2, Plus, AlertCircle, CheckCircle, X, ShoppingBag, BarChart2, TrendingUp, Users, IndianRupee, Settings, LogOut, UserPlus, Pencil as PencilIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
 
 interface SizeVariant {
   id: string;
@@ -45,7 +51,8 @@ interface Product {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'subfamilies' | 'coupons'>('products');
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'subfamilies' | 'coupons' | 'orders' | 'settings'>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -92,11 +99,44 @@ export default function AdminPage() {
   const [couponForm, setCouponForm] = useState({ code: '', percentage: '', validUntil: '', isHome: false });
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
 
+  // Orders state
+  const [orders, setOrders] = useState<any[]>([]);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  // Analytics state
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // Settings state
+  const [adminName, setAdminName] = useState('');
+  const [nameLoading, setNameLoading] = useState(false);
+  const [nameSuccess, setNameSuccess] = useState('');
+  const [newAdminForm, setNewAdminForm] = useState({ email: '', name: '', password: '', confirmPassword: '' });
+  const [newAdminLoading, setNewAdminLoading] = useState(false);
+  const [newAdminSuccess, setNewAdminSuccess] = useState('');
+  const [newAdminError, setNewAdminError] = useState('');
+
+  // Load admin name on mount
+  useEffect(() => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) setAdminName(JSON.parse(userData).name || '');
+    } catch {}
+  }, []);
+
   // Fetch data
   useEffect(() => {
     fetchCategories();
     fetchSubfamilies();
     if (activeTab === 'coupons') fetchCoupons();
+    if (activeTab === 'orders') fetchOrders();
+    if (activeTab === 'dashboard') fetchAnalytics();
+    if (activeTab === 'settings') {
+      try {
+        const userData = localStorage.getItem('user');
+        if (userData) setAdminName(JSON.parse(userData).name || '');
+      } catch {}
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -122,6 +162,128 @@ export default function AdminPage() {
       setCoupons(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching coupons');
+    }
+  };
+
+  const fetchOrders = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/orders', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error('Failed to fetch orders');
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching orders');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/analytics', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error('Failed to fetch analytics');
+      const data = await res.json();
+      setAnalytics(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching analytics');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const handleChangeName = async () => {
+    if (!adminName.trim()) return;
+    setNameLoading(true);
+    setNameSuccess('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ name: adminName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update name');
+      // Update localStorage
+      try {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          const parsed = JSON.parse(userData);
+          localStorage.setItem('user', JSON.stringify({ ...parsed, name: data.name }));
+        }
+      } catch {}
+      setNameSuccess('Name updated successfully!');
+      setTimeout(() => setNameSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error updating name');
+    } finally {
+      setNameLoading(false);
+    }
+  };
+
+  const handleCreateAdminUser = async () => {
+    setNewAdminError('');
+    setNewAdminSuccess('');
+    const { email, name, password, confirmPassword } = newAdminForm;
+    if (!email || !name || !password || !confirmPassword) {
+      setNewAdminError('All fields are required'); return;
+    }
+    if (password !== confirmPassword) {
+      setNewAdminError('Passwords do not match'); return;
+    }
+    if (password.length < 6) {
+      setNewAdminError('Password must be at least 6 characters'); return;
+    }
+    setNewAdminLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ email, name, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create admin');
+      setNewAdminSuccess(`Admin user "${data.name}" created successfully!`);
+      setNewAdminForm({ email: '', name: '', password: '', confirmPassword: '' });
+      setTimeout(() => setNewAdminSuccess(''), 4000);
+    } catch (err) {
+      setNewAdminError(err instanceof Error ? err.message : 'Error creating admin user');
+    } finally {
+      setNewAdminLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    router.push('/login');
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error('Failed to update status');
+      const updated = await res.json();
+      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error updating order status');
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -593,10 +755,13 @@ export default function AdminPage() {
   };
 
   const tabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: <BarChart2 className="w-4 h-4" /> },
     { id: 'products', label: 'Products', icon: <Package className="w-4 h-4" /> },
     { id: 'subfamilies', label: 'Subfamilies', icon: <LayoutGrid className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <Tag className="w-4 h-4" /> },
     { id: 'coupons', label: 'Coupons', icon: <Ticket className="w-4 h-4" /> },
+    { id: 'orders', label: 'Orders', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
   ] as const;
 
   const inputCls = "w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition";
@@ -653,17 +818,27 @@ export default function AdminPage() {
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{tabs.find(t => t.id === activeTab)?.label}</p>
             <h1 className="text-xl font-black text-black mt-0.5">
-              {activeTab === 'products' ? 'Manage Products' :
+              {activeTab === 'dashboard' ? 'Analytics & Sales' :
+               activeTab === 'products' ? 'Manage Products' :
                activeTab === 'subfamilies' ? 'Manage Subfamilies' :
-               activeTab === 'categories' ? 'Manage Categories' : 'Manage Coupons'}
+               activeTab === 'categories' ? 'Manage Categories' :
+               activeTab === 'orders' ? 'Manage Orders' :
+               activeTab === 'settings' ? 'Settings' : 'Manage Coupons'}
             </h1>
           </div>
-          {isLoading && (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-              Loading...
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                Loading...
+              </div>
+            )}
+            {adminName && (
+              <p className="hidden sm:block text-sm font-black text-black">
+                Hi, {adminName} Sir
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="px-6 sm:px-8 py-7">
@@ -672,6 +847,231 @@ export default function AdminPage() {
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <p>{error}</p>
               <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+            </div>
+          )}
+
+          {/* Dashboard Tab */}
+          {activeTab === 'dashboard' && (
+            <div>
+              {analyticsLoading || !analytics ? (
+                <div className="flex items-center justify-center h-64">
+                  <span className="w-6 h-6 border-2 border-gray-300 border-t-black rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-8">
+
+                  {/* ── Overview Cards ── */}
+                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    {[
+                      { label: 'Total Revenue', value: `₹${analytics.overview.totalRevenue.toLocaleString('en-IN')}`, icon: <IndianRupee className="w-5 h-5" />, color: 'bg-amber-50 text-amber-600' },
+                      { label: 'Total Orders', value: analytics.overview.totalOrders, icon: <ShoppingBag className="w-5 h-5" />, color: 'bg-blue-50 text-blue-600' },
+                      { label: 'Avg Order Value', value: `₹${analytics.overview.avgOrderValue.toLocaleString('en-IN')}`, icon: <TrendingUp className="w-5 h-5" />, color: 'bg-green-50 text-green-600' },
+                      { label: 'Customers (ordered)', value: analytics.overview.uniqueCustomers, icon: <Users className="w-5 h-5" />, color: 'bg-purple-50 text-purple-600' },
+                      { label: 'Total Users', value: analytics.overview.totalUsers, icon: <Users className="w-5 h-5" />, color: 'bg-pink-50 text-pink-600' },
+                      { label: 'Total Products', value: analytics.overview.totalProducts, icon: <Package className="w-5 h-5" />, color: 'bg-gray-50 text-gray-600' },
+                    ].map((card) => (
+                      <div key={card.label} className="bg-white rounded-2xl border border-gray-100 p-5">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${card.color}`}>
+                          {card.icon}
+                        </div>
+                        <p className="text-2xl font-black text-gray-900">{card.value}</p>
+                        <p className="text-xs text-gray-400 font-medium mt-1">{card.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Daily Revenue – last 30 days ── */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="font-black text-black uppercase tracking-wide text-sm">Daily Revenue</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">Last 30 days</p>
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <AreaChart data={analytics.dailySales} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} interval={4} />
+                        <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                        <Tooltip formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} labelStyle={{ fontSize: 12 }} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                        <Area type="monotone" dataKey="revenue" stroke="#f59e0b" strokeWidth={2} fill="url(#revGrad)" dot={false} activeDot={{ r: 4 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* ── Daily Orders ── */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                    <div className="mb-6">
+                      <h3 className="font-black text-black uppercase tracking-wide text-sm">Daily Orders</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">Last 30 days</p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={analytics.dailySales} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} interval={4} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+                        <Tooltip formatter={(v: any) => [v, 'Orders']} labelStyle={{ fontSize: 12 }} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                        <Bar dataKey="orders" fill="#000" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* ── Monthly Revenue + Orders ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                      <div className="mb-6">
+                        <h3 className="font-black text-black uppercase tracking-wide text-sm">Monthly Revenue</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">Last 12 months</p>
+                      </div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={analytics.monthlySales} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                          <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                          <Tooltip formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} labelStyle={{ fontSize: 12 }} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                          <Bar dataKey="revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                      <div className="mb-6">
+                        <h3 className="font-black text-black uppercase tracking-wide text-sm">Monthly Orders</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">Last 12 months</p>
+                      </div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <LineChart data={analytics.monthlySales} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                          <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+                          <Tooltip formatter={(v: any) => [v, 'Orders']} labelStyle={{ fontSize: 12 }} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                          <Line type="monotone" dataKey="orders" stroke="#000" strokeWidth={2} dot={{ r: 3, fill: '#000' }} activeDot={{ r: 5 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* ── Status Distribution + Top Products ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                      <h3 className="font-black text-black uppercase tracking-wide text-sm mb-6">Order Status Breakdown</h3>
+                      {analytics.statusDistribution.length === 0 ? (
+                        <p className="text-gray-400 text-sm text-center py-8">No orders yet</p>
+                      ) : (() => {
+                        const PIE_COLORS = ['#3b82f6', '#f59e0b', '#a855f7', '#22c55e', '#6b7280'];
+                        const total = analytics.statusDistribution.reduce((s: number, d: any) => s + d.count, 0);
+                        return (
+                          <div className="flex flex-col gap-4">
+                            <ResponsiveContainer width="100%" height={200}>
+                              <PieChart>
+                                <Pie
+                                  data={analytics.statusDistribution}
+                                  dataKey="count"
+                                  nameKey="status"
+                                  cx="50%" cy="50%"
+                                  innerRadius={55}
+                                  outerRadius={85}
+                                  paddingAngle={3}
+                                >
+                                  {analytics.statusDistribution.map((_: any, i: number) => (
+                                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip
+                                  formatter={(v: any, _: any, props: any) => [`${v} orders (${((v / total) * 100).toFixed(0)}%)`, props.payload.status]}
+                                  contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                            <div className="grid grid-cols-2 gap-2">
+                              {analytics.statusDistribution.map((d: any, i: number) => (
+                                <div key={d.status} className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                                  <span className="text-xs font-semibold text-gray-700 truncate">{d.status}</span>
+                                  <span className="text-xs text-gray-400 ml-auto">{d.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                      <h3 className="font-black text-black uppercase tracking-wide text-sm mb-6">Top 5 Products by Revenue</h3>
+                      {analytics.topProducts.length === 0 ? (
+                        <p className="text-gray-400 text-sm text-center py-8">No sales data yet</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {analytics.topProducts.map((p: any, i: number) => {
+                            const maxRev = analytics.topProducts[0].revenue;
+                            const pct = maxRev > 0 ? (p.revenue / maxRev) * 100 : 0;
+                            return (
+                              <div key={i}>
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                  <span className="font-semibold text-gray-800 truncate max-w-[60%]">{p.name}</span>
+                                  <span className="font-black text-gray-900">₹{p.revenue.toLocaleString('en-IN')}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className="text-xs text-gray-400 w-14 text-right">{p.unitsSold} units</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Recent Orders ── */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="font-black text-black uppercase tracking-wide text-sm">Recent Orders</h3>
+                      <button onClick={() => setActiveTab('orders')} className="text-xs font-bold text-gray-400 hover:text-black transition">View All →</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-400 font-bold uppercase tracking-wider border-b border-gray-100">
+                            <th className="pb-3 text-left">Order ID</th>
+                            <th className="pb-3 text-left">Items</th>
+                            <th className="pb-3 text-left">Amount</th>
+                            <th className="pb-3 text-left">Status</th>
+                            <th className="pb-3 text-left">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {analytics.recentOrders.map((o: any) => {
+                            const statusColor: Record<string, string> = { accepted: 'bg-blue-100 text-blue-700', packaging: 'bg-amber-100 text-amber-700', shipped: 'bg-purple-100 text-purple-700', delivered: 'bg-green-100 text-green-700', pending: 'bg-gray-100 text-gray-600' };
+                            return (
+                              <tr key={o.id}>
+                                <td className="py-3 font-mono text-xs text-gray-500">#{o.id.slice(-8).toUpperCase()}</td>
+                                <td className="py-3 text-gray-700">{o.itemCount} item{o.itemCount !== 1 ? 's' : ''}</td>
+                                <td className="py-3 font-black text-gray-900">₹{o.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                <td className="py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${statusColor[o.status] || 'bg-gray-100 text-gray-600'}`}>{o.status?.toUpperCase()}</span></td>
+                                <td className="py-3 text-gray-400 text-xs">{new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
+                              </tr>
+                            );
+                          })}
+                          {analytics.recentOrders.length === 0 && (
+                            <tr><td colSpan={5} className="py-8 text-center text-gray-400">No orders yet</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              )}
             </div>
           )}
 
@@ -1264,6 +1664,213 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+          {/* Orders Tab */}
+          {activeTab === 'orders' && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <p className="text-sm text-gray-500">{orders.length} total order{orders.length !== 1 ? 's' : ''}</p>
+                <button onClick={fetchOrders} className="text-sm font-semibold text-gray-600 hover:text-black transition">↻ Refresh</button>
+              </div>
+
+              {orders.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+                  <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">No orders yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {orders.map((order) => {
+                    const statusColors: Record<string, string> = {
+                      accepted: 'bg-blue-100 text-blue-700',
+                      packaging: 'bg-amber-100 text-amber-700',
+                      shipped: 'bg-purple-100 text-purple-700',
+                      delivered: 'bg-green-100 text-green-700',
+                      pending: 'bg-gray-100 text-gray-600',
+                    };
+                    return (
+                      <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                          <div>
+                            <p className="text-xs text-gray-400 font-mono mb-0.5">#{order.id.slice(-8).toUpperCase()}</p>
+                            <p className="font-black text-gray-900 text-lg">₹{order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                            {order.paymentId && (
+                              <p className="text-xs text-gray-400 mt-0.5">Payment: <span className="font-mono">{order.paymentId}</span></p>
+                            )}
+                          </div>
+
+                          {/* Status changer */}
+                          <div className="flex items-center gap-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {order.status?.toUpperCase()}
+                            </span>
+                            <select
+                              value={order.status}
+                              disabled={updatingOrderId === order.id}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:border-black transition disabled:opacity-50"
+                            >
+                              <option value="accepted">Accepted</option>
+                              <option value="packaging">Packaging</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                            </select>
+                            {updatingOrderId === order.id && (
+                              <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Items */}
+                        <div className="border-t border-gray-50 pt-3 space-y-1.5">
+                          {order.items?.map((item: any) => (
+                            <div key={item.id} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-700">{item.product?.name || 'Product'} <span className="text-gray-400">× {item.quantity}</span></span>
+                              <span className="font-semibold text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Settings Tab */}
+          {activeTab === 'settings' && (
+            <div className="max-w-xl space-y-6">
+
+              {/* Change Name */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center">
+                    <PencilIcon className="w-4 h-4 text-gray-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-black text-sm uppercase tracking-wide">Change Display Name</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Update your admin profile name</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleChangeName()}
+                    placeholder="Your name"
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                  />
+                  <button
+                    onClick={handleChangeName}
+                    disabled={nameLoading || !adminName.trim()}
+                    className="px-5 py-2.5 bg-black text-white text-sm font-bold rounded-lg hover:bg-amber-400 hover:text-black transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {nameLoading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" /> : 'Save'}
+                  </button>
+                </div>
+                {nameSuccess && (
+                  <div className="flex items-center gap-2 mt-3 text-green-600 text-sm font-medium">
+                    <CheckCircle className="w-4 h-4" /> {nameSuccess}
+                  </div>
+                )}
+              </div>
+
+              {/* Create New Admin */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <UserPlus className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-black text-sm uppercase tracking-wide">Create Admin User</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">New user will have full admin access</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={newAdminForm.name}
+                    onChange={(e) => setNewAdminForm({ ...newAdminForm, name: e.target.value })}
+                    placeholder="Full name"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                  />
+                  <input
+                    type="email"
+                    value={newAdminForm.email}
+                    onChange={(e) => setNewAdminForm({ ...newAdminForm, email: e.target.value })}
+                    placeholder="Email address"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                  />
+                  <input
+                    type="password"
+                    value={newAdminForm.password}
+                    onChange={(e) => setNewAdminForm({ ...newAdminForm, password: e.target.value })}
+                    placeholder="Password (min 6 characters)"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                  />
+                  <input
+                    type="password"
+                    value={newAdminForm.confirmPassword}
+                    onChange={(e) => setNewAdminForm({ ...newAdminForm, confirmPassword: e.target.value })}
+                    placeholder="Confirm password"
+                    className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none transition ${
+                      newAdminForm.confirmPassword && newAdminForm.password !== newAdminForm.confirmPassword
+                        ? 'border-red-300 focus:border-red-500'
+                        : 'border-gray-200 focus:border-black'
+                    }`}
+                  />
+                  {newAdminForm.confirmPassword && newAdminForm.password !== newAdminForm.confirmPassword && (
+                    <p className="text-xs text-red-500 font-medium">Passwords do not match</p>
+                  )}
+                  {newAdminError && (
+                    <div className="flex items-center gap-2 text-red-600 text-sm font-medium">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" /> {newAdminError}
+                    </div>
+                  )}
+                  {newAdminSuccess && (
+                    <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" /> {newAdminSuccess}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleCreateAdminUser}
+                    disabled={newAdminLoading}
+                    className="w-full flex items-center justify-center gap-2 bg-black text-white py-2.5 rounded-lg font-bold text-sm hover:bg-amber-400 hover:text-black transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {newAdminLoading ? (
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <><UserPlus className="w-4 h-4" /> Create Admin</>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Logout */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center">
+                    <LogOut className="w-4 h-4 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-black text-sm uppercase tracking-wide">Sign Out</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">End your current admin session</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-lg font-bold text-sm hover:bg-red-600 hover:text-white hover:border-red-600 transition"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </div>
+
+            </div>
+          )}
+
         </div>
       </main>
     </div>

@@ -328,7 +328,13 @@ export default function ProfilePage() {
                         </div>
                         <div className="text-right">
                           <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
-                          <span className="inline-block text-xs px-2 py-1 rounded-full bg-gray-900 text-white">{order.status || 'pending'}</span>
+                          <span className={`inline-block text-xs px-3 py-1 rounded-full font-bold ${
+                            order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                            order.status === 'shipped'   ? 'bg-purple-100 text-purple-700' :
+                            order.status === 'packaging' ? 'bg-amber-100 text-amber-700' :
+                            order.status === 'accepted'  ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{(order.status || 'pending').toUpperCase()}</span>
                         </div>
                       </div>
                       <div className="text-sm text-gray-700">
