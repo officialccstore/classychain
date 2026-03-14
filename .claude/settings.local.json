@@ -3,7 +3,19 @@
     "allow": [
       "Bash(cat /Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/products/[id]/route.ts)",
       "Bash(xargs ls:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(curl -s http://localhost:3000/api/products)",
+      "Bash(curl -s http://localhost:3000/api/admin/homepage)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \"const { PrismaClient } = require\\(''@prisma/client''\\); const p = new PrismaClient\\(\\); console.log\\(''siteConfig exists:'', typeof p.siteConfig\\); p.$disconnect\\(\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(node -e \"const { ArrowRight, Star, MapPin, Phone, Mail, Heart } = require\\(''lucide-react''\\); console.log\\(''All icons OK:'', !!ArrowRight, !!Star, !!MapPin, !!Phone, !!Mail, !!Heart\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/about)",
+      "Bash(curl -s http://localhost:3000/about)",
+      "Bash(node -e \"const lr = require\\(''''./node_modules/lucide-react/dist/cjs/icons/heart.js''''\\); console.log\\(typeof lr, typeof lr.default, Object.keys\\(lr\\).slice\\(0,3\\)\\)\")",
+      "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); const keys = Object.keys\\(lr\\); console.log\\(''Total exports:'', keys.length\\); console.log\\(''Sample:'', keys.slice\\(0,5\\)\\); console.log\\(''Has Heart:'', keys.includes\\(''Heart''\\)\\); console.log\\(''Has MapPin:'', keys.includes\\(''MapPin''\\)\\)\")",
+      "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); console.log\\(''Heart type:'', typeof lr.Heart, ''Heart name:'', lr.Heart?.name\\); console.log\\(''ArrowRight type:'', typeof lr.ArrowRight, lr.ArrowRight?.name\\)\")"
     ]
   }
 }

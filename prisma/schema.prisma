@@ -179,6 +179,12 @@ model Review {
   updatedAt DateTime @updatedAt
 }
 
+model SiteConfig {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  key   String @unique
+  value String // JSON string
+}
+
 model Coupon {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   code        String   @unique

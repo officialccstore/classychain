@@ -141,6 +141,10 @@ export default function Nav() {
               ALL PRODUCTS
             </Link>
 
+            <Link href="/about" className="text-sm font-semibold text-gray-700 hover:text-black transition tracking-wide">
+              ABOUT US
+            </Link>
+
           </div>
         </div>
       </nav>
@@ -248,9 +252,12 @@ export default function Nav() {
               )}
             </MobileSection>
 
-            <div className="px-4 py-3">
+            <div className="px-4 py-3 flex gap-6">
               <Link href="/products" className="text-sm font-semibold text-gray-700 hover:text-black" onClick={() => setIsMobileMenuOpen(false)}>
                 All Products
+              </Link>
+              <Link href="/about" className="text-sm font-semibold text-gray-700 hover:text-black" onClick={() => setIsMobileMenuOpen(false)}>
+                About Us
               </Link>
             </div>
           </div>

@@ -52,7 +52,7 @@ interface Product {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'subfamilies' | 'coupons' | 'orders' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'subfamilies' | 'coupons' | 'orders' | 'settings' | 'homepage'>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -116,6 +116,14 @@ export default function AdminPage() {
   const [newAdminSuccess, setNewAdminSuccess] = useState('');
   const [newAdminError, setNewAdminError] = useState('');
 
+  // Homepage state
+  const [homepageFeaturedIds, setHomepageFeaturedIds] = useState<string[]>([]);
+  const [homepageHeroIds, setHomepageHeroIds] = useState<string[]>([]);
+  const [allProductsForHomepage, setAllProductsForHomepage] = useState<Product[]>([]);
+  const [homepageSaving, setHomepageSaving] = useState<'featured' | 'hero' | null>(null);
+  const [homepageSaveMsg, setHomepageSaveMsg] = useState('');
+  const [homepageSearch, setHomepageSearch] = useState('');
+
   // Load admin name on mount
   useEffect(() => {
     try {
@@ -131,6 +139,7 @@ export default function AdminPage() {
     if (activeTab === 'coupons') fetchCoupons();
     if (activeTab === 'orders') fetchOrders();
     if (activeTab === 'dashboard') fetchAnalytics();
+    if (activeTab === 'homepage') fetchHomepageConfig();
     if (activeTab === 'settings') {
       try {
         const userData = localStorage.getItem('user');
@@ -142,6 +151,58 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeTab === 'products') fetchProducts();
   }, [activeTab, page, selectedCategoryFilter, selectedSubcategoryFilter]);
+
+  const fetchHomepageConfig = async () => {
+    const token = localStorage.getItem('token');
+
+    // Load products independently so a config failure doesn't block the picker
+    try {
+      const prodRes = await fetch('/api/products?limit=200');
+      if (prodRes.ok) {
+        const prodData = await prodRes.json();
+        const prods = Array.isArray(prodData.products) ? prodData.products : Array.isArray(prodData) ? prodData : [];
+        setAllProductsForHomepage(prods);
+      } else {
+        console.error('Products API returned', prodRes.status);
+      }
+    } catch (err) {
+      console.error('Failed to load products for homepage picker:', err);
+    }
+
+    // Load saved config separately
+    try {
+      const cfgRes = await fetch('/api/admin/homepage', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (cfgRes.ok) {
+        const cfg = await cfgRes.json();
+        if (cfg.featuredIds) setHomepageFeaturedIds(cfg.featuredIds);
+        if (cfg.heroIds) setHomepageHeroIds(cfg.heroIds);
+      } else {
+        console.error('Homepage config API returned', cfgRes.status);
+      }
+    } catch (err) {
+      console.error('Failed to load homepage config:', err);
+    }
+  };
+
+  const saveHomepage = async (type: 'featured' | 'hero', ids: string[]) => {
+    setHomepageSaving(type);
+    setHomepageSaveMsg('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/homepage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ type, productIds: ids }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setHomepageSaveMsg(`${type === 'featured' ? 'Featured products' : 'Hero images'} saved!`);
+      setTimeout(() => setHomepageSaveMsg(''), 3000);
+    } catch {
+      setHomepageSaveMsg('Save failed. Please try again.');
+    } finally {
+      setHomepageSaving(null);
+    }
+  };
 
   const fetchSubfamilies = async () => {
     try {
@@ -762,6 +823,7 @@ export default function AdminPage() {
     { id: 'coupons', label: 'Coupons', icon: <Ticket className="w-4 h-4" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingBag className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
+    { id: 'homepage', label: 'Homepage', icon: <LayoutGrid className="w-4 h-4" /> },
   ] as const;
 
   const inputCls = "w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition";
@@ -1866,6 +1928,153 @@ export default function AdminPage() {
                   <LogOut className="w-4 h-4" />
                   Logout
                 </button>
+              </div>
+
+            </div>
+          )}
+
+          {/* ═══════════════ HOMEPAGE TAB ═══════════════ */}
+          {activeTab === 'homepage' && (
+            <div className="space-y-10">
+              {homepageSaveMsg && (
+                <div className={`px-5 py-3 rounded-lg text-sm font-semibold ${homepageSaveMsg.includes('failed') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                  {homepageSaveMsg}
+                </div>
+              )}
+
+              {/* ── Search bar for product picker ── */}
+              <input
+                type="text"
+                placeholder="Search products by name or brand…"
+                value={homepageSearch}
+                onChange={e => setHomepageSearch(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+              />
+
+              {/* ── Featured Products (New Arrivals) ── */}
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h2 className="text-lg font-black text-gray-900">New Arrivals — Featured Products</h2>
+                    <p className="text-sm text-gray-400 mt-0.5">Select exactly 4 products to show in the New Arrivals section on the homepage.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${homepageFeaturedIds.length === 4 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {homepageFeaturedIds.length}/4 selected
+                    </span>
+                    <button
+                      onClick={() => saveHomepage('featured', homepageFeaturedIds)}
+                      disabled={homepageSaving === 'featured' || homepageFeaturedIds.length === 0}
+                      className="px-5 py-2 bg-black text-white text-sm font-black uppercase tracking-wider rounded-lg hover:bg-gray-800 disabled:opacity-50 transition"
+                    >
+                      {homepageSaving === 'featured' ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+
+                {allProductsForHomepage.length === 0 ? (
+                  <p className="text-gray-400 text-sm py-6 text-center">Loading products…</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-5">
+                    {allProductsForHomepage.filter(p => !homepageSearch || p.name.toLowerCase().includes(homepageSearch.toLowerCase()) || p.brand.toLowerCase().includes(homepageSearch.toLowerCase())).map(product => {
+                      const selected = homepageFeaturedIds.includes(product.id);
+                      return (
+                        <button
+                          key={product.id}
+                          onClick={() => {
+                            if (selected) {
+                              setHomepageFeaturedIds(ids => ids.filter(id => id !== product.id));
+                            } else if (homepageFeaturedIds.length < 4) {
+                              setHomepageFeaturedIds(ids => [...ids, product.id]);
+                            }
+                          }}
+                          className={`relative rounded-xl border-2 overflow-hidden text-left transition-all ${selected ? 'border-black shadow-md' : 'border-gray-200 hover:border-gray-400'}`}
+                        >
+                          {selected && (
+                            <div className="absolute top-2 right-2 z-10 w-6 h-6 bg-black rounded-full flex items-center justify-center">
+                              <CheckCircle className="w-4 h-4 text-amber-400" />
+                            </div>
+                          )}
+                          <div className="aspect-square bg-gray-50 overflow-hidden">
+                            {product.image ? (
+                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300 font-black text-2xl">CC</div>
+                            )}
+                          </div>
+                          <div className="p-2.5">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">{product.brand}</p>
+                            <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug">{product.name}</p>
+                            <p className="text-xs font-black text-black mt-1">₹{product.price.toLocaleString('en-IN')}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Hero Slider Images ── */}
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h2 className="text-lg font-black text-gray-900">Hero Slider — Shoe Images</h2>
+                    <p className="text-sm text-gray-400 mt-0.5">Select exactly 3 products whose images will be shown in the homepage hero slider.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${homepageHeroIds.length === 3 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {homepageHeroIds.length}/3 selected
+                    </span>
+                    <button
+                      onClick={() => saveHomepage('hero', homepageHeroIds)}
+                      disabled={homepageSaving === 'hero' || homepageHeroIds.length === 0}
+                      className="px-5 py-2 bg-black text-white text-sm font-black uppercase tracking-wider rounded-lg hover:bg-gray-800 disabled:opacity-50 transition"
+                    >
+                      {homepageSaving === 'hero' ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+
+                {allProductsForHomepage.length === 0 ? (
+                  <p className="text-gray-400 text-sm py-6 text-center">Loading products…</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-5">
+                    {allProductsForHomepage.filter(p => !homepageSearch || p.name.toLowerCase().includes(homepageSearch.toLowerCase()) || p.brand.toLowerCase().includes(homepageSearch.toLowerCase())).map(product => {
+                      const selected = homepageHeroIds.includes(product.id);
+                      return (
+                        <button
+                          key={product.id}
+                          onClick={() => {
+                            if (selected) {
+                              setHomepageHeroIds(ids => ids.filter(id => id !== product.id));
+                            } else if (homepageHeroIds.length < 3) {
+                              setHomepageHeroIds(ids => [...ids, product.id]);
+                            }
+                          }}
+                          className={`relative rounded-xl border-2 overflow-hidden text-left transition-all ${selected ? 'border-black shadow-md' : 'border-gray-200 hover:border-gray-400'}`}
+                        >
+                          {selected && (
+                            <div className="absolute top-2 right-2 z-10 w-6 h-6 bg-black rounded-full flex items-center justify-center">
+                              <CheckCircle className="w-4 h-4 text-amber-400" />
+                            </div>
+                          )}
+                          <div className="aspect-square bg-gray-50 overflow-hidden">
+                            {product.image ? (
+                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300 font-black text-2xl">CC</div>
+                            )}
+                          </div>
+                          <div className="p-2.5">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">{product.brand}</p>
+                            <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug">{product.name}</p>
+                            <p className="text-xs font-black text-black mt-1">₹{product.price.toLocaleString('en-IN')}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>

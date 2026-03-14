@@ -30,7 +30,10 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [heroProducts, setHeroProducts] = useState<Product[]>([]);
   const [scrollY, setScrollY] = useState(0);
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const heroRef = useRef<HTMLElement>(null);
 
   // Parallax scroll listener — passive for performance
@@ -48,34 +51,33 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/products?limit=6&sort=newest")
+    fetch("/api/homepage/config")
       .then((r) => r.json())
-      .then((data) =>
-        setFeaturedProducts(
-          Array.isArray(data.products) ? data.products : Array.isArray(data) ? data : []
-        )
-      )
+      .then((data) => {
+        if (data.featuredProducts) setFeaturedProducts(data.featuredProducts);
+        if (data.heroProducts) setHeroProducts(data.heroProducts);
+      })
       .catch(() => {});
   }, []);
 
   const heroSlides = [
     {
       subtitle: "New Season · 2026",
-      title: "Premium\nRunning",
-      desc: "Advanced cushioning meets sleek design. Built for those who move with intention.",
-      tag: "Performance",
+      title: "Walk Like\nYou Mean It",
+      desc: "Every step you take tells a story. Wear boots that make yours unforgettable.",
+      tag: "Statement",
     },
     {
-      subtitle: "Timeless Silhouettes",
-      title: "Everyday\nElegance",
-      desc: "The perfect union of comfort and timeless style for the modern connoisseur.",
-      tag: "Classic",
+      subtitle: "Crafted for the Daring",
+      title: "Born to\nBe Bold",
+      desc: "Life's too short for ordinary footwear. The streets remember the ones who stood apart.",
+      tag: "Identity",
     },
     {
-      subtitle: "Black Tie Ready",
-      title: "Formal\nExcellence",
-      desc: "Command every room. Make an impression that lasts long after you've left.",
-      tag: "Formal",
+      subtitle: "Leave Your Mark",
+      title: "Every Step.\nYour Legacy.",
+      desc: "They'll forget your words. They'll remember how you walked into the room.",
+      tag: "Legacy",
     },
   ];
 
@@ -88,17 +90,17 @@ export default function Home() {
   const reviews = [
     {
       name: "Arjun M.",
-      text: "Absolutely love the quality. These shoes are worth every rupee — comfortable from day one.",
+      text: "I wore these to my job interview. Got the job. I'm not saying the boots did it — but I'm not saying they didn't.",
       rating: 5,
     },
     {
       name: "Priya S.",
-      text: "ClassyChain has the best collection I've found. Fast delivery and packaging was gorgeous.",
+      text: "I've never had so many strangers compliment my footwear. ClassyChain just gets it. Delivery was fast, packaging was beautiful.",
       rating: 5,
     },
     {
       name: "Rahul K.",
-      text: "Bought 3 pairs already. The craftsmanship is exceptional. My go-to footwear brand.",
+      text: "Third pair and counting. Once you know what real craftsmanship feels like under your feet, you can't go back.",
       rating: 5,
     },
   ];
@@ -134,9 +136,9 @@ export default function Home() {
           />
 
           {heroSlides.map((slide, idx) => {
-            // Right-side shoe: use actual product image, or fall back to Unsplash product shot
-            const shoeImg =
-              featuredProducts[idx]?.image || SLIDE_BG[idx];
+            // Use hero products from DB; fall back to SLIDE_BG if not loaded yet
+            const heroImg = heroProducts[idx]?.image || SLIDE_BG[idx];
+            const shoeImg = heroImg;
 
             return (
               <div
@@ -157,7 +159,7 @@ export default function Home() {
                 >
                   {/* Full-bleed shoe background */}
                   <img
-                    src={SLIDE_BG[idx]}
+                    src={heroImg}
                     alt=""
                     aria-hidden="true"
                     className="w-full h-full object-cover"
@@ -315,9 +317,9 @@ export default function Home() {
         <section className="bg-[#080808] border-t border-white/[0.05]">
           <div className="max-w-5xl mx-auto flex flex-col sm:flex-row">
             {[
-              { icon: <Truck className="w-4 h-4" />, label: "Free Shipping", sub: "On all orders" },
-              { icon: <RefreshCw className="w-4 h-4" />, label: "Easy Returns", sub: "30-day policy" },
-              { icon: <Shield className="w-4 h-4" />, label: "Authentic Only", sub: "100% genuine" },
+              { icon: <Truck className="w-4 h-4" />, label: "Free Shipping", sub: "Every order, every time" },
+              { icon: <RefreshCw className="w-4 h-4" />, label: "Easy Returns", sub: "No questions asked, 30 days" },
+              { icon: <Shield className="w-4 h-4" />, label: "100% Authentic", sub: "Real quality, real you" },
             ].map((b, i) => (
               <div
                 key={i}
@@ -344,7 +346,7 @@ export default function Home() {
               <Flame className="w-5 h-5 text-black flex-shrink-0" />
               <div>
                 <p className="font-black text-black text-sm uppercase tracking-widest">Deal of the Day</p>
-                <p className="text-black/60 text-xs">Exclusive offers — refreshed daily</p>
+                <p className="text-black/60 text-xs">Today only — don&apos;t let this one walk away</p>
               </div>
             </div>
             <Link
@@ -370,7 +372,7 @@ export default function Home() {
                       Shop by Category
                     </span>
                   </div>
-                  <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">Our Collections</h2>
+                  <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">Find Your Sole</h2>
                 </div>
                 <Link
                   href="/products"
@@ -422,7 +424,7 @@ export default function Home() {
                     <span className="block w-8 h-px bg-amber-400" />
                     <span className="text-amber-500 text-[11px] font-bold uppercase tracking-[0.3em]">Just Landed</span>
                   </div>
-                  <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">New Arrivals</h2>
+                  <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">Fresh Off the Block</h2>
                 </div>
                 <Link
                   href="/products?sort=newest"
@@ -460,14 +462,14 @@ export default function Home() {
                           {String(idx + 1).padStart(2, "0")}
                         </div>
                       </div>
-                      <div className="p-4 border-b border-gray-100">
+                      <div className="p-4 border-b border-gray-100 flex flex-col">
                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">
                           {product.brand}
                         </p>
-                        <h3 className="font-bold text-sm text-gray-900 line-clamp-2 mb-3 group-hover:text-amber-600 transition leading-snug">
+                        <h3 className="font-bold text-sm text-gray-900 line-clamp-2 group-hover:text-amber-600 transition leading-snug" style={{ minHeight: '2.5rem' }}>
                           {product.name}
                         </h3>
-                        <div className="flex items-baseline gap-2">
+                        <div className="flex items-baseline gap-2 mt-3">
                           <span className="font-black text-base text-black">
                             ₹{product.price.toLocaleString("en-IN")}
                           </span>
@@ -540,8 +542,8 @@ export default function Home() {
                 <span className="text-amber-500 text-[11px] font-bold uppercase tracking-[0.3em]">Customer Love</span>
                 <span className="block w-8 h-px bg-amber-400" />
               </div>
-              <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">What People Say</h2>
-              <p className="text-gray-400 mt-3 text-sm">500+ five-star reviews from our customers</p>
+              <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">Worn. Loved. Repeated.</h2>
+              <p className="text-gray-400 mt-3 text-sm">Real people. Real steps. Real love — 500+ five-star reviews.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {reviews.map((r, i) => (
@@ -590,10 +592,10 @@ export default function Home() {
               <span className="block w-8 h-px bg-amber-400" />
             </div>
             <h2 className="text-4xl sm:text-5xl font-black text-white mb-5 leading-tight">
-              Step Into Style Today
+              You&apos;ve Waited Long Enough.
             </h2>
             <p className="text-white/40 text-base mb-10 max-w-md mx-auto leading-relaxed">
-              Join thousands of customers who trust ClassyChain for premium footwear
+              The right pair doesn&apos;t just complete an outfit — it completes how you feel walking out the door. Find yours today.
             </p>
             <div className="flex gap-4 justify-center flex-wrap">
               <Link
@@ -622,18 +624,49 @@ export default function Home() {
               <span className="text-amber-500 text-[11px] font-bold uppercase tracking-[0.3em]">Newsletter</span>
               <span className="block w-8 h-px bg-amber-400" />
             </div>
-            <h2 className="text-3xl font-black text-black mb-2">Stay in the Loop</h2>
-            <p className="text-gray-400 text-sm mb-8">Subscribe and get 10% off your first order</p>
-            <div className="flex gap-0 flex-col sm:flex-row border-2 border-black overflow-hidden">
-              <input
-                type="email"
-                placeholder="Enter your email address"
-                className="flex-1 px-5 py-3.5 outline-none text-sm bg-transparent text-black placeholder-gray-400"
-              />
-              <button className="bg-black text-white px-7 py-3.5 font-black text-[11px] uppercase tracking-widest hover:bg-gray-800 transition whitespace-nowrap">
-                Subscribe
-              </button>
-            </div>
+            <h2 className="text-3xl font-black text-black mb-2">Be First. Always.</h2>
+            <p className="text-gray-400 text-sm mb-8">Drop alerts, secret deals, and stories from behind the store — plus 10% off your first order.</p>
+            {newsletterStatus === 'done' ? (
+              <p className="text-green-600 font-bold text-sm py-4">You&apos;re in! Check your inbox for your 10% off code.</p>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newsletterEmail) return;
+                  setNewsletterStatus('loading');
+                  try {
+                    await fetch('/api/newsletter', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: newsletterEmail }),
+                    });
+                    setNewsletterStatus('done');
+                  } catch {
+                    setNewsletterStatus('error');
+                  }
+                }}
+                className="flex gap-0 flex-col sm:flex-row border-2 border-black overflow-hidden"
+              >
+                <input
+                  type="email"
+                  required
+                  placeholder="Enter your email address"
+                  value={newsletterEmail}
+                  onChange={(e) => setNewsletterEmail(e.target.value)}
+                  className="flex-1 px-5 py-3.5 outline-none text-sm bg-transparent text-black placeholder-gray-400"
+                />
+                <button
+                  type="submit"
+                  disabled={newsletterStatus === 'loading'}
+                  className="bg-black text-white px-7 py-3.5 font-black text-[11px] uppercase tracking-widest hover:bg-gray-800 transition whitespace-nowrap disabled:opacity-60"
+                >
+                  {newsletterStatus === 'loading' ? 'Sending…' : 'Subscribe'}
+                </button>
+              </form>
+            )}
+            {newsletterStatus === 'error' && (
+              <p className="text-red-500 text-xs mt-2">Something went wrong. Try again.</p>
+            )}
           </div>
         </section>
       </main>
@@ -649,7 +682,7 @@ export default function Home() {
                 <LogoWithText size="md" variant="light" />
               </div>
               <p className="text-white/30 text-sm leading-relaxed max-w-xs">
-                Premium footwear for those who dare to stand out. Quality, style, and comfort in every step.
+                For people who believe the first impression starts at the ground. We make sure it&apos;s a good one.
               </p>
             </div>
             <div>
@@ -666,17 +699,14 @@ export default function Home() {
               <ul className="space-y-3 text-sm text-white/30">
                 <li><Link href="/about" className="hover:text-amber-400 transition">About Us</Link></li>
                 <li><Link href="/about#contact" className="hover:text-amber-400 transition">Contact</Link></li>
-                <li><a href="#" className="hover:text-amber-400 transition">Terms &amp; Conditions</a></li>
-                <li><a href="#" className="hover:text-amber-400 transition">Privacy Policy</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-bold text-[11px] uppercase tracking-[0.25em] mb-6 text-white/40">Get in Touch</h4>
-              <p className="text-sm text-white/30 mb-1">support@classychain.com</p>
+              <p className="text-sm text-white/30 mb-1">officialccstore@gmail.com</p>
               <p className="text-sm text-white/30 mb-6">+91 98765 43210</p>
               <div className="flex gap-5">
                 <a href="#" className="text-[11px] text-amber-400 hover:text-amber-300 transition font-bold uppercase tracking-widest">Instagram</a>
-                <a href="#" className="text-[11px] text-amber-400 hover:text-amber-300 transition font-bold uppercase tracking-widest">Facebook</a>
               </div>
             </div>
           </div>
