@@ -15,7 +15,9 @@
       "Bash(curl -s http://localhost:3000/about)",
       "Bash(node -e \"const lr = require\\(''''./node_modules/lucide-react/dist/cjs/icons/heart.js''''\\); console.log\\(typeof lr, typeof lr.default, Object.keys\\(lr\\).slice\\(0,3\\)\\)\")",
       "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); const keys = Object.keys\\(lr\\); console.log\\(''Total exports:'', keys.length\\); console.log\\(''Sample:'', keys.slice\\(0,5\\)\\); console.log\\(''Has Heart:'', keys.includes\\(''Heart''\\)\\); console.log\\(''Has MapPin:'', keys.includes\\(''MapPin''\\)\\)\")",
-      "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); console.log\\(''Heart type:'', typeof lr.Heart, ''Heart name:'', lr.Heart?.name\\); console.log\\(''ArrowRight type:'', typeof lr.ArrowRight, lr.ArrowRight?.name\\)\")"
+      "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); console.log\\(''Heart type:'', typeof lr.Heart, ''Heart name:'', lr.Heart?.name\\); console.log\\(''ArrowRight type:'', typeof lr.ArrowRight, lr.ArrowRight?.name\\)\")",
+      "Bash(nvm use:*)",
+      "Bash(npm run:*)"
     ]
   }
 }

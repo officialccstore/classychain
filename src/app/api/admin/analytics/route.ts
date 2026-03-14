@@ -34,9 +34,9 @@ export async function GET(request: Request) {
 
     // ── Overall stats ────────────────────────────────────────────────────────
     const totalOrders = allOrders.length
-    const totalRevenue = allOrders.reduce((s, o) => s + o.totalPrice, 0)
+    const totalRevenue = allOrders.reduce((s: number, o: { totalPrice: number }) => s + o.totalPrice, 0)
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
-    const uniqueCustomers = new Set(allOrders.map(o => o.userId)).size
+    const uniqueCustomers = new Set(allOrders.map((o: { userId: string }) => o.userId)).size
 
     // ── Order status distribution ────────────────────────────────────────────
     const statusCount: Record<string, number> = {}
@@ -114,11 +114,11 @@ export async function GET(request: Request) {
     const recentOrders = allOrders
       .slice(-5)
       .reverse()
-      .map(o => ({
+      .map((o: { id: string; totalPrice: number; status: string; items: { quantity: number }[]; createdAt: Date }) => ({
         id: o.id,
         totalPrice: o.totalPrice,
         status: o.status,
-        itemCount: o.items.reduce((s, i) => s + i.quantity, 0),
+        itemCount: o.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0),
         createdAt: o.createdAt,
       }))
 
