@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Trash2, ArrowRight, ShoppingBag, Plus, Minus } from 'lucide-react'
+import { Trash2, ArrowRight, ShoppingBag, Plus, Minus, X, Phone } from 'lucide-react'
+import { showToast } from '@/components/Toast'
 
 interface CartItem {
   id: string
@@ -20,12 +21,111 @@ interface CartItem {
   quantity: number
 }
 
+function PhoneModal({ onClose, onSaved }: { onClose: () => void; onSaved: (phone: string) => void }) {
+  const [phone, setPhone] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const validate = (value: string) => {
+    const digits = value.replace(/\D/g, '')
+    if (!digits) return 'Phone number is required'
+    if (digits.length !== 10) return 'Phone number must be 10 digits'
+    if (!/^[6-9]/.test(digits)) return 'Enter a valid Indian mobile number'
+    return ''
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 10)
+    setPhone(raw)
+    if (error) setError(validate(raw))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const validationError = validate(phone)
+    if (validationError) { setError(validationError); return }
+
+    setSaving(true)
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ phone }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      // Update local user data
+      localStorage.setItem('user', JSON.stringify({ ...user, phone }))
+      showToast('Phone number saved!', 'success', 3000)
+      onSaved(phone)
+    } catch {
+      setError('Failed to save phone number. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center justify-center w-12 h-12 bg-amber-100 rounded-full mx-auto mb-4">
+          <Phone className="w-6 h-6 text-amber-500" />
+        </div>
+
+        <h2 className="text-xl font-black text-black text-center mb-1">Add Phone Number</h2>
+        <p className="text-sm text-gray-500 text-center mb-6">
+          We need your phone number to process your order and for delivery updates.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Mobile Number
+            </label>
+            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-amber-400 focus-within:border-transparent">
+              <span className="px-3 py-2.5 bg-gray-50 border-r border-gray-300 text-gray-600 text-sm font-medium">+91</span>
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={phone}
+                onChange={handleChange}
+                placeholder="9876543210"
+                maxLength={10}
+                className="flex-1 px-3 py-2.5 outline-none text-sm"
+              />
+            </div>
+            {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-black text-white py-3 rounded-lg font-bold text-sm hover:bg-amber-400 hover:text-black transition disabled:bg-gray-300"
+          >
+            {saving ? 'Saving...' : 'Save & Continue to Checkout'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(true)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [showPhoneModal, setShowPhoneModal] = useState(false)
   const router = useRouter()
 
   const getItemKey = (item: { productId: string; sizeVariantId?: string | null }) =>
@@ -125,6 +225,19 @@ export default function CartPage() {
 
   const handleCheckout = () => {
     if (!isLoggedIn) { router.push('/login?next=/checkout'); return }
+
+    // Check if user has a phone number
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!user.phone) {
+      setShowPhoneModal(true)
+      return
+    }
+
+    router.push('/checkout')
+  }
+
+  const handlePhoneSaved = (phone: string) => {
+    setShowPhoneModal(false)
     router.push('/checkout')
   }
 
@@ -158,6 +271,13 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {showPhoneModal && (
+        <PhoneModal
+          onClose={() => setShowPhoneModal(false)}
+          onSaved={handlePhoneSaved}
+        />
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">

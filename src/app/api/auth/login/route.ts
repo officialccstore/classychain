@@ -20,6 +20,14 @@ export async function POST(request: Request) {
       )
     }
 
+    // Google-only accounts have no password
+    if (!user.password) {
+      return NextResponse.json(
+        { error: 'This account uses Google Sign-In. Please login with Google.' },
+        { status: 401 }
+      )
+    }
+
     // Compare passwords
     const isPasswordValid = await bcryptjs.compare(password, user.password)
 
@@ -34,7 +42,7 @@ export async function POST(request: Request) {
     const token = signToken({ id: user.id, email: user.email, role: user.role })
 
     return NextResponse.json({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone },
       token,
     })
   } catch (error) {

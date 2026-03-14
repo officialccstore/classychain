@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { showToast } from '@/components/Toast'
 import { LogoWithText } from '@/components/Logo'
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,7 +16,38 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleLoginSuccess = async (token: string, user: any) => {
+    localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(user))
+
+    // Move pending cart to user's account
+    const pendingCart = localStorage.getItem('pendingCart')
+    if (pendingCart) {
+      try {
+        const cartItems = JSON.parse(pendingCart)
+        await fetch('/api/cart/merge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ items: cartItems }),
+        })
+        localStorage.removeItem('pendingCart')
+        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
+        showToast('Cart items transferred to your account!', 'success', 3000)
+      } catch (cartError) {
+        console.error('Failed to merge cart:', cartError)
+      }
+    }
+
+    const urlParams = new URL(window.location.href).searchParams
+    const redirect = urlParams.get('redirect') || urlParams.get('next') || (user.role === 'admin' ? '/admin' : '/products')
+    window.location.href = redirect
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,38 +68,38 @@ export default function LoginPage() {
       }
 
       const data = await response.json()
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
-
-      // Move pending cart to user's account
-      const pendingCart = localStorage.getItem('pendingCart')
-      if (pendingCart) {
-        try {
-          const cartItems = JSON.parse(pendingCart)
-          await fetch('/api/cart/merge', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${data.token}`,
-            },
-            body: JSON.stringify({ items: cartItems }),
-          })
-          localStorage.removeItem('pendingCart')
-              try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
-          showToast('Cart items transferred to your account!', 'success', 3000)
-        } catch (cartError) {
-          console.error('Failed to merge cart:', cartError)
-        }
-      }
-
-      // Check for redirect param (use window.location to avoid SSR/useSearchParams constraints)
-      const urlParams = new URL(window.location.href).searchParams
-      const redirect = urlParams.get('redirect') || urlParams.get('next') || (data.user.role === 'admin' ? '/admin' : '/products')
-      window.location.href = redirect
+      await handleLoginSuccess(data.token, data.user)
     } catch (error) {
       setError('An error occurred. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) return
+    setGoogleLoading(true)
+    setError('')
+    try {
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: credentialResponse.credential }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        setError(data.error || 'Google login failed')
+        return
+      }
+
+      const data = await response.json()
+      showToast('Signed in with Google!', 'success', 3000)
+      await handleLoginSuccess(data.token, data.user)
+    } catch (err) {
+      setError('Google login failed. Please try again.')
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -91,6 +123,27 @@ export default function LoginPage() {
             {error}
           </div>
         )}
+
+        {/* Google Sign-In */}
+        <div className="mb-4">
+          <div className={googleLoading ? 'opacity-60 pointer-events-none' : ''}>
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError('Google login failed. Please try again.')}
+              width="100%"
+              shape="rectangular"
+              theme="outline"
+              text="continue_with"
+              logo_alignment="left"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-sm text-gray-400 font-medium">or</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
