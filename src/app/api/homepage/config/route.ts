@@ -8,7 +8,7 @@ async function seedIfEmpty(key: string, limit: number) {
 
   // Auto-seed with the first `limit` products
   const products = await prisma.product.findMany({ take: limit, orderBy: { createdAt: 'desc' } })
-  const ids = products.map(p => p.id)
+  const ids = products.map((p: { id: string }) => p.id)
   await prisma.siteConfig.create({ data: { key, value: JSON.stringify(ids) } })
   return ids
 }
@@ -33,11 +33,11 @@ export async function GET() {
 
     // Preserve the saved order
     const orderedFeatured = featuredIds
-      .map(id => featuredProducts.find(p => p.id === id))
+      .map((id: string) => featuredProducts.find((p: { id: string }) => p.id === id))
       .filter(Boolean)
 
     const orderedHero = heroIds
-      .map(id => heroProducts.find(p => p.id === id))
+      .map((id: string) => heroProducts.find((p: { id: string }) => p.id === id))
       .filter(Boolean)
 
     return NextResponse.json({ featuredProducts: orderedFeatured, heroProducts: orderedHero })
