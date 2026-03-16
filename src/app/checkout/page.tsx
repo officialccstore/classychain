@@ -25,7 +25,16 @@ function CheckoutContent() {
   const [loading, setLoading] = useState(true)
   const [placing, setPlacing] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
+  const [user, setUser] = useState<{ name?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; zipCode?: string; country?: string } | null>(null)
+
+  const [shippingName, setShippingName] = useState('')
+  const [shippingPhone, setShippingPhone] = useState('')
+  const [shippingLine1, setShippingLine1] = useState('')
+  const [shippingLine2, setShippingLine2] = useState('')
+  const [shippingCity, setShippingCity] = useState('')
+  const [shippingState, setShippingState] = useState('')
+  const [shippingZip, setShippingZip] = useState('')
+  const [shippingCountry, setShippingCountry] = useState('')
 
   const [couponCode, setCouponCode] = useState('')
   const [couponLoading, setCouponLoading] = useState(false)
@@ -53,7 +62,17 @@ function CheckoutContent() {
     setIsLoggedIn(!!token)
     try {
       const userData = localStorage.getItem('user')
-      if (userData) setUser(JSON.parse(userData))
+      if (userData) {
+        const parsed = JSON.parse(userData)
+        setUser(parsed)
+        setShippingName(parsed.name || '')
+        setShippingPhone(parsed.phone || '')
+        setShippingLine1(parsed.address || '')
+        setShippingCity(parsed.city || '')
+        setShippingState(parsed.state || '')
+        setShippingZip(parsed.zipCode || '')
+        setShippingCountry(parsed.country || '')
+      }
     } catch {}
     fetchCart()
   }, [])
@@ -140,6 +159,37 @@ function CheckoutContent() {
       const token = localStorage.getItem('token')
 
       // Step 1: Create Razorpay order on server
+      const name = shippingName.trim() || user?.name || ''
+      const phone = shippingPhone.trim() || user?.phone || ''
+      const line1 = shippingLine1.trim()
+      const city = shippingCity.trim()
+      const state = shippingState.trim()
+      const zip = shippingZip.trim()
+      const country = shippingCountry.trim()
+
+      if (!line1 || !city || !state || !zip || !country) {
+        alert('Please provide your shipping address before checking out.')
+        setPlacing(false)
+        return
+      }
+
+      const shippingAddress = [
+        name,
+        phone ? `Phone: ${phone}` : null,
+        line1,
+        shippingLine2.trim() || null,
+        `${city}, ${state} ${zip}`,
+        country,
+      ]
+        .filter(Boolean)
+        .join('\n')
+
+      const updatedUser = { ...user, name, phone, address: line1, city, state, zipCode: zip, country }
+      setUser(updatedUser)
+      try {
+        localStorage.setItem('user', JSON.stringify(updatedUser))
+      } catch {}
+
       const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -164,6 +214,17 @@ function CheckoutContent() {
         theme: { color: '#000000' },
         handler: async (response: any) => {
           // Step 4: Verify signature + create DB order
+          const shippingAddress = [
+            shippingName.trim() || user?.name || '',
+            shippingPhone.trim() ? `Phone: ${shippingPhone.trim()}` : null,
+            shippingLine1.trim(),
+            shippingLine2.trim() || null,
+            shippingCity.trim() ? `${shippingCity.trim()}, ${shippingState.trim()} ${shippingZip.trim()}` : null,
+            shippingCountry.trim(),
+          ]
+            .filter(Boolean)
+            .join('\n')
+
           const verifyRes = await fetch('/api/razorpay/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -173,6 +234,7 @@ function CheckoutContent() {
               razorpay_signature: response.razorpay_signature,
               items: cartItems,
               total,
+              shippingAddress,
             }),
           })
           const verifyData = await verifyRes.json()
@@ -257,6 +319,66 @@ function CheckoutContent() {
           {/* Summary + payment */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Shipping Information</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                <input
+                  type="text"
+                  value={shippingName}
+                  onChange={(e) => setShippingName(e.target.value)}
+                  placeholder="Full name"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="tel"
+                  value={shippingPhone}
+                  onChange={(e) => setShippingPhone(e.target.value)}
+                  placeholder="Phone number"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="text"
+                  value={shippingLine1}
+                  onChange={(e) => setShippingLine1(e.target.value)}
+                  placeholder="Address line 1"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="text"
+                  value={shippingLine2}
+                  onChange={(e) => setShippingLine2(e.target.value)}
+                  placeholder="Address line 2 (optional)"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="text"
+                  value={shippingCity}
+                  onChange={(e) => setShippingCity(e.target.value)}
+                  placeholder="City"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="text"
+                  value={shippingState}
+                  onChange={(e) => setShippingState(e.target.value)}
+                  placeholder="State"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="text"
+                  value={shippingZip}
+                  onChange={(e) => setShippingZip(e.target.value)}
+                  placeholder="ZIP / Postal code"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+                <input
+                  type="text"
+                  value={shippingCountry}
+                  onChange={(e) => setShippingCountry(e.target.value)}
+                  placeholder="Country"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                />
+              </div>
+
               <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Price Details</h3>
 
               <div className="space-y-3 text-sm mb-5">

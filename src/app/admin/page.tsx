@@ -1783,12 +1783,34 @@ export default function AdminPage() {
                           </div>
                         </div>
 
+                        {/* Customer */}
+                        <div className="border-t border-gray-50 pt-4 pb-3">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Customer</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700">
+                            <div>
+                              <p className="font-semibold text-gray-900">{order.user?.name || 'Guest'}</p>
+                              <p className="text-gray-500">{order.user?.email || 'No email'}</p>
+                              {order.user?.phone && <p className="text-gray-500">{order.user.phone}</p>}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">Shipping</p>
+                              <p className="text-gray-500 whitespace-pre-line">{order.shippingAddress || [order.user?.address, order.user?.city, order.user?.state, order.user?.zipCode, order.user?.country].filter(Boolean).join(', ') || 'Not provided'}</p>
+                            </div>
+                          </div>
+                        </div>
+
                         {/* Items */}
                         <div className="border-t border-gray-50 pt-3 space-y-1.5">
                           {order.items?.map((item: any) => (
-                            <div key={item.id} className="flex items-center justify-between text-sm">
-                              <span className="text-gray-700">{item.product?.name || 'Product'} <span className="text-gray-400">× {item.quantity}</span></span>
-                              <span className="font-semibold text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            <div key={item.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
+                              <div>
+                                <p className="text-gray-700 font-semibold">{item.product?.name || 'Product'}</p>
+                                <p className="text-gray-500 text-xs">{item.product?.brand || ''} · ₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })} each</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-gray-500">Qty: {item.quantity}</span>
+                                <span className="font-semibold text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
                             </div>
                           ))}
                         </div>
