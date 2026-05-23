@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, Heart, ChevronLeft, ChevronRight, ArrowRight, Truck, RefreshCw, Shield, ChevronDown, ChevronUp, Tag } from 'lucide-react'
+import { ShoppingCart, Heart, ChevronLeft, ChevronRight, ArrowRight, Truck, RefreshCw, Shield, ChevronDown, ChevronUp, Tag, X, Ruler } from 'lucide-react'
 import { showToast } from '@/components/Toast'
 import { LogoWithText } from '@/components/Logo'
 
@@ -35,24 +35,59 @@ interface Product {
   specifications?: string
 }
 
-// Size conversion tables (UK base)
-const SIZE_CONVERSIONS: Record<string, Record<string, string>> = {
-  '3':  { UK: '3',  US: '4',  EUR: '36' },
-  '4':  { UK: '4',  US: '5',  EUR: '37' },
-  '5':  { UK: '5',  US: '6',  EUR: '38' },
-  '6':  { UK: '6',  US: '7',  EUR: '39' },
-  '7':  { UK: '7',  US: '8',  EUR: '40' },
-  '8':  { UK: '8',  US: '9',  EUR: '41' },
-  '9':  { UK: '9',  US: '10', EUR: '42' },
-  '10': { UK: '10', US: '11', EUR: '43' },
-  '11': { UK: '11', US: '12', EUR: '44' },
-  '12': { UK: '12', US: '13', EUR: '45' },
-}
+const SIZE_CHART = [
+  { uk: '4',  us: '5',  eur: '37', cm: '23.5' },
+  { uk: '5',  us: '6',  eur: '38', cm: '24.0' },
+  { uk: '6',  us: '7',  eur: '39', cm: '24.5' },
+  { uk: '7',  us: '8',  eur: '40', cm: '25.5' },
+  { uk: '8',  us: '9',  eur: '41', cm: '26.0' },
+  { uk: '9',  us: '10', eur: '42', cm: '27.0' },
+  { uk: '10', us: '11', eur: '43', cm: '27.5' },
+  { uk: '11', us: '12', eur: '44', cm: '28.5' },
+  { uk: '12', us: '13', eur: '45', cm: '29.5' },
+]
 
-function convertSize(ukSize: string, format: 'UK' | 'US' | 'EUR'): string {
-  const entry = SIZE_CONVERSIONS[ukSize]
-  if (entry) return entry[format] || ukSize
-  return ukSize
+function SizeChartModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Ruler className="w-5 h-5 text-gray-700" />
+            <h2 className="text-base font-black uppercase tracking-wider">Size Chart</h2>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-xs text-gray-500 mb-4">Measure your foot from heel to toe and match to the foot length below.</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="py-2.5 px-3 text-left text-xs font-black uppercase tracking-wider text-gray-500 rounded-tl-lg">UK</th>
+                <th className="py-2.5 px-3 text-left text-xs font-black uppercase tracking-wider text-gray-500">US</th>
+                <th className="py-2.5 px-3 text-left text-xs font-black uppercase tracking-wider text-gray-500">EUR</th>
+                <th className="py-2.5 px-3 text-left text-xs font-black uppercase tracking-wider text-gray-500 rounded-tr-lg">Foot Length</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SIZE_CHART.map((row, i) => (
+                <tr key={row.uk} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="py-2.5 px-3 font-bold text-gray-900">{row.uk}</td>
+                  <td className="py-2.5 px-3 text-gray-600">{row.us}</td>
+                  <td className="py-2.5 px-3 text-gray-600">{row.eur}</td>
+                  <td className="py-2.5 px-3 text-gray-600">{row.cm} cm</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[11px] text-gray-400 mt-3">* All sizes are based on UK sizing. Measurements are approximate.</p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function AccordionSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -76,7 +111,7 @@ export default function ProductDetailPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [selectedColor, setSelectedColor] = useState<string | null>(null)
-  const [sizeFormat, setSizeFormat] = useState<'UK' | 'US' | 'EUR'>('UK')
+  const [sizeChartOpen, setSizeChartOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [adding, setAdding] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
@@ -195,6 +230,7 @@ export default function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {sizeChartOpen && <SizeChartModal onClose={() => setSizeChartOpen(false)} />}
       {/* Breadcrumb */}
       <div className="border-b border-gray-100 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-2 text-xs text-gray-400">
@@ -311,24 +347,17 @@ export default function ProductDetailPage() {
               <div className="mb-7">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-black uppercase tracking-wider text-gray-700">Select Size</h4>
-                  {/* Size Format Toggle */}
-                  <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                    {(['UK', 'US', 'EUR'] as const).map((fmt) => (
-                      <button
-                        key={fmt}
-                        onClick={() => setSizeFormat(fmt)}
-                        className={`px-2.5 py-1 text-xs font-bold transition ${sizeFormat === fmt ? 'bg-black text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                      >
-                        {fmt}
-                      </button>
-                    ))}
-                  </div>
+                  <button
+                    onClick={() => setSizeChartOpen(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black underline underline-offset-2 transition"
+                  >
+                    <Ruler className="w-3.5 h-3.5" /> Size Chart
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {product.sizeVariants.map((v) => {
                     const sizes = v.size.includes(',') ? v.size.split(',').map(s => s.trim()) : [v.size]
                     return sizes.map((size, sizeIdx) => {
-                      const displaySize = convertSize(size, sizeFormat)
                       const isSelected = selectedVariantId === v.id && selectedSize === size
                       const isOOS = v.quantity === 0
                       return (
@@ -336,24 +365,18 @@ export default function ProductDetailPage() {
                           key={`${v.id}-${sizeIdx}`}
                           onClick={() => { setSelectedVariantId(v.id); setSelectedSize(size) }}
                           disabled={isOOS}
-                          title={`UK ${size} = US ${convertSize(size, 'US')} = EUR ${convertSize(size, 'EUR')}`}
                           className={`relative min-w-[52px] px-4 py-2.5 border-2 rounded-lg text-sm font-bold transition-all
                             ${isSelected ? 'border-black bg-black text-white' :
                               isOOS ? 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed' :
                               'border-gray-200 bg-white text-gray-800 hover:border-gray-400'}`}
                         >
                           {isOOS && <span className="absolute inset-0 flex items-center justify-center"><span className="w-full h-0.5 bg-gray-300 rotate-45 absolute" /></span>}
-                          <span className="relative">{displaySize}</span>
+                          <span className="relative">{size}</span>
                         </button>
                       )
                     })
                   })}
                 </div>
-                {selectedSize && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    UK {selectedSize} = US {convertSize(selectedSize, 'US')} = EUR {convertSize(selectedSize, 'EUR')}
-                  </p>
-                )}
               </div>
             )}
 
