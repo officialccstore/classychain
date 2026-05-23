@@ -76,6 +76,11 @@ export default function AdminPage() {
     subfamilyId: '',
     categoryId: '',
     subcategoryId: '',
+    tags: '',
+    colors: '',
+    material: '',
+    features: '',
+    specifications: '',
   });
   const [sizeVariants, setSizeVariants] = useState<Omit<SizeVariant, 'id'>[]>([
     { size: '', quantity: 0 },
@@ -102,6 +107,9 @@ export default function AdminPage() {
   // Orders state
   const [orders, setOrders] = useState<any[]>([]);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
+  const [savingTrackingId, setSavingTrackingId] = useState<string | null>(null);
 
   // Analytics state
   const [analytics, setAnalytics] = useState<any>(null);
@@ -348,6 +356,26 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveTrackingId = async (orderId: string) => {
+    const trackingId = trackingInputs[orderId] ?? '';
+    setSavingTrackingId(orderId);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ trackingId }),
+      });
+      if (!res.ok) throw new Error('Failed to save tracking ID');
+      const updated = await res.json();
+      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error saving tracking ID');
+    } finally {
+      setSavingTrackingId(null);
+    }
+  };
+
   const fetchCategories = async () => {
     try {
       const res = await fetch('/api/categories');
@@ -465,6 +493,8 @@ export default function AdminPage() {
         ...productForm,
         mrp: parseFloat(productForm.mrp),
         price: parseFloat(productForm.price),
+        tags: productForm.tags ? productForm.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+        colors: productForm.colors ? productForm.colors.split(',').map((c: string) => c.trim()).filter(Boolean) : [],
         sizeVariants,
       };
 
@@ -487,7 +517,7 @@ export default function AdminPage() {
       }
 
       // Reset form
-      setProductForm({ name: '', description: '', mrp: '', price: '', image: '', images: [], brand: '', family: '', subfamilyId: '', categoryId: '', subcategoryId: '' });
+      setProductForm({ name: '', description: '', mrp: '', price: '', image: '', images: [], brand: '', family: '', subfamilyId: '', categoryId: '', subcategoryId: '', tags: '', colors: '', material: '', features: '', specifications: '' });
       setSizeVariants([{ size: '', quantity: 0 }]);
       setEditingProductId(null);
       fetchProducts();
@@ -514,6 +544,11 @@ export default function AdminPage() {
       subfamilyId: category?.subfamilyId || '',
       categoryId: product.categoryId,
       subcategoryId: product.subcategoryId || '',
+      tags: (product as any).tags?.join(', ') || '',
+      colors: (product as any).colors?.join(', ') || '',
+      material: (product as any).material || '',
+      features: (product as any).features || '',
+      specifications: (product as any).specifications || '',
     });
     setSizeVariants(product.sizeVariants || [{ size: '', quantity: 0 }]);
     setEditingProductId(product.id);
@@ -1105,6 +1140,7 @@ export default function AdminPage() {
                         <thead>
                           <tr className="text-xs text-gray-400 font-bold uppercase tracking-wider border-b border-gray-100">
                             <th className="pb-3 text-left">Order ID</th>
+                            <th className="pb-3 text-left">Customer</th>
                             <th className="pb-3 text-left">Items</th>
                             <th className="pb-3 text-left">Amount</th>
                             <th className="pb-3 text-left">Status</th>
@@ -1117,6 +1153,7 @@ export default function AdminPage() {
                             return (
                               <tr key={o.id}>
                                 <td className="py-3 font-mono text-xs text-gray-500">#{o.id.slice(-8).toUpperCase()}</td>
+                                <td className="py-3 text-gray-800 font-semibold text-xs">{o.customerName || '—'}</td>
                                 <td className="py-3 text-gray-700">{o.itemCount} item{o.itemCount !== 1 ? 's' : ''}</td>
                                 <td className="py-3 font-black text-gray-900">₹{o.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                 <td className="py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${statusColor[o.status] || 'bg-gray-100 text-gray-600'}`}>{o.status?.toUpperCase()}</span></td>
@@ -1125,7 +1162,7 @@ export default function AdminPage() {
                             );
                           })}
                           {analytics.recentOrders.length === 0 && (
-                            <tr><td colSpan={5} className="py-8 text-center text-gray-400">No orders yet</td></tr>
+                            <tr><td colSpan={6} className="py-8 text-center text-gray-400">No orders yet</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -1172,6 +1209,33 @@ export default function AdminPage() {
                 <div className="mb-4">
                   <label className={labelCls}>Description</label>
                   <textarea value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} className={inputCls} rows={3} />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className={labelCls}>Tags / Keywords <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                    <input type="text" value={productForm.tags} onChange={(e) => setProductForm({ ...productForm, tags: e.target.value })} className={inputCls} placeholder="e.g., Office Wear, TPR Sole, Leather" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Available Colors <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                    <input type="text" value={productForm.colors} onChange={(e) => setProductForm({ ...productForm, colors: e.target.value })} className={inputCls} placeholder="e.g., Black, Brown, Tan" />
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className={labelCls}>Material</label>
+                  <input type="text" value={productForm.material} onChange={(e) => setProductForm({ ...productForm, material: e.target.value })} className={inputCls} placeholder="e.g., Premium Leather, Faux Leather, Mesh" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className={labelCls}>Features</label>
+                    <textarea value={productForm.features} onChange={(e) => setProductForm({ ...productForm, features: e.target.value })} className={inputCls} rows={3} placeholder="e.g., Non-slip sole, Padded insole, Breathable..." />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Specifications</label>
+                    <textarea value={productForm.specifications} onChange={(e) => setProductForm({ ...productForm, specifications: e.target.value })} className={inputCls} rows={3} placeholder="e.g., Sole: TPR, Upper: Leather, Occasion: Formal..." />
+                  </div>
                 </div>
 
                 <div className="mb-4">
@@ -1311,7 +1375,7 @@ export default function AdminPage() {
                     {isLoading ? 'Saving...' : editingProductId ? 'Update Product' : 'Create Product'}
                   </button>
                   {editingProductId && (
-                    <button type="button" onClick={() => { setEditingProductId(null); setProductForm({ name: '', description: '', mrp: '', price: '', image: '', images: [], brand: '', family: '', subfamilyId: '', categoryId: '', subcategoryId: '' }); setSizeVariants([{ size: '', quantity: 0 }]); }} className={secondaryBtn}>
+                    <button type="button" onClick={() => { setEditingProductId(null); setProductForm({ name: '', description: '', mrp: '', price: '', image: '', images: [], brand: '', family: '', subfamilyId: '', categoryId: '', subcategoryId: '', tags: '', colors: '', material: '', features: '', specifications: '' }); setSizeVariants([{ size: '', quantity: 0 }]); }} className={secondaryBtn}>
                       Cancel
                     </button>
                   )}
@@ -1651,6 +1715,7 @@ export default function AdminPage() {
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Code</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Discount</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Used</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valid Until</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Homepage</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
@@ -1668,6 +1733,11 @@ export default function AdminPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className="font-semibold text-green-600">{coupon.percentage}% OFF</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs font-bold">
+                                {coupon.usageCount ?? 0}×
+                              </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {new Date(coupon.validUntil).toLocaleDateString()}
@@ -1715,7 +1785,7 @@ export default function AdminPage() {
                       })}
                       {coupons.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                          <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                             No coupons found. Create your first coupon above.
                           </td>
                         </tr>
@@ -1740,7 +1810,7 @@ export default function AdminPage() {
                   <p className="text-gray-500 font-medium">No orders yet</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {orders.map((order) => {
                     const statusColors: Record<string, string> = {
                       accepted: 'bg-blue-100 text-blue-700',
@@ -1748,72 +1818,157 @@ export default function AdminPage() {
                       shipped: 'bg-purple-100 text-purple-700',
                       delivered: 'bg-green-100 text-green-700',
                       pending: 'bg-gray-100 text-gray-600',
+                      cancelled: 'bg-red-100 text-red-700',
+                      return_requested: 'bg-orange-100 text-orange-700',
                     };
+                    const paymentStatusColors: Record<string, string> = {
+                      razorpay: 'bg-indigo-100 text-indigo-700',
+                      cod: 'bg-yellow-100 text-yellow-700',
+                    };
+                    const isExpanded = expandedOrderId === order.id;
+                    const productTypes = [...new Set(order.items?.map((i: any) => i.product?.name || 'Product'))].slice(0, 2).join(', ');
+
                     return (
-                      <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-5">
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-                          <div>
-                            <p className="text-xs text-gray-400 font-mono mb-0.5">#{order.id.slice(-8).toUpperCase()}</p>
-                            <p className="font-black text-gray-900 text-lg">₹{order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
-                            {order.paymentId && (
-                              <p className="text-xs text-gray-400 mt-0.5">Payment: <span className="font-mono">{order.paymentId}</span></p>
-                            )}
-                          </div>
-
-                          {/* Status changer */}
-                          <div className="flex items-center gap-2">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-600'}`}>
-                              {order.status?.toUpperCase()}
-                            </span>
-                            <select
-                              value={order.status}
-                              disabled={updatingOrderId === order.id}
-                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:border-black transition disabled:opacity-50"
-                            >
-                              <option value="accepted">Accepted</option>
-                              <option value="packaging">Packaging</option>
-                              <option value="shipped">Shipped</option>
-                              <option value="delivered">Delivered</option>
-                            </select>
-                            {updatingOrderId === order.id && (
-                              <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Customer */}
-                        <div className="border-t border-gray-50 pt-4 pb-3">
-                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Customer</p>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700">
+                      <div key={order.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                        {/* Compact Bar */}
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
+                          <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-3 items-center text-sm">
                             <div>
-                              <p className="font-semibold text-gray-900">{order.user?.name || 'Guest'}</p>
-                              <p className="text-gray-500">{order.user?.email || 'No email'}</p>
-                              {order.user?.phone && <p className="text-gray-500">{order.user.phone}</p>}
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Order ID</p>
+                              <p className="font-mono text-xs font-bold text-gray-800">#{order.id.slice(-8).toUpperCase()}</p>
                             </div>
                             <div>
-                              <p className="font-semibold text-gray-900">Shipping</p>
-                              <p className="text-gray-500 whitespace-pre-line">{order.shippingAddress || [order.user?.address, order.user?.city, order.user?.state, order.user?.zipCode, order.user?.country].filter(Boolean).join(', ') || 'Not provided'}</p>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Customer</p>
+                              <p className="font-semibold text-gray-900 truncate">{order.user?.name || 'Guest'}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Order Status</p>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-600'}`}>
+                                {order.status?.toUpperCase().replace('_', ' ')}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Product</p>
+                              <p className="text-gray-700 text-xs truncate">{productTypes || '—'}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Payment</p>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${paymentStatusColors[order.paymentMethod] || 'bg-gray-100 text-gray-600'}`}>
+                                {order.paymentMethod === 'cod' ? 'COD' : 'Online'}
+                              </span>
                             </div>
                           </div>
+                          <button
+                            onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                            className="flex items-center gap-1.5 text-xs font-bold text-black border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 transition whitespace-nowrap"
+                          >
+                            {isExpanded ? 'Hide Details' : 'Show Details'}
+                            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
                         </div>
 
-                        {/* Items */}
-                        <div className="border-t border-gray-50 pt-3 space-y-1.5">
-                          {order.items?.map((item: any) => (
-                            <div key={item.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
-                              <div>
-                                <p className="text-gray-700 font-semibold">{item.product?.name || 'Product'}</p>
-                                <p className="text-gray-500 text-xs">{item.product?.brand || ''} · ₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })} each</p>
+                        {/* Expanded Details */}
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 px-5 py-5 space-y-5 bg-gray-50">
+                            {/* Customer Info */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                                <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Customer Details</p>
+                                <div className="space-y-1.5 text-sm">
+                                  <p><span className="text-gray-500">Name:</span> <span className="font-semibold text-gray-900">{order.user?.name || '—'}</span></p>
+                                  <p><span className="text-gray-500">Phone:</span> <span className="font-semibold text-gray-900">{order.user?.phone || '—'}</span></p>
+                                  <p><span className="text-gray-500">Email:</span> <span className="font-semibold text-gray-900">{order.user?.email || '—'}</span></p>
+                                  <p><span className="text-gray-500">Address:</span> <span className="font-semibold text-gray-900 whitespace-pre-line">{order.shippingAddress || [order.user?.address, order.user?.city, order.user?.state, order.user?.zipCode, order.user?.country].filter(Boolean).join(', ') || '—'}</span></p>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-gray-500">Qty: {item.quantity}</span>
-                                <span className="font-semibold text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                                <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Order Details</p>
+                                <div className="space-y-1.5 text-sm">
+                                  <p><span className="text-gray-500">Order ID:</span> <span className="font-mono font-bold">#{order.id}</span></p>
+                                  <p><span className="text-gray-500">Date:</span> <span className="font-semibold">{new Date(order.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></p>
+                                  <p><span className="text-gray-500">Total:</span> <span className="font-black text-black">₹{order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></p>
+                                  <p><span className="text-gray-500">Payment Method:</span> <span className="font-semibold">{order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online (Razorpay)'}</span></p>
+                                  <p><span className="text-gray-500">Payment Status:</span> <span className={`font-bold ${order.paymentMethod === 'cod' ? 'text-yellow-600' : 'text-green-600'}`}>{order.paymentMethod === 'cod' ? 'Pending (COD)' : 'Paid'}</span></p>
+                                  {order.paymentId && order.paymentId !== 'COD' && (
+                                    <p><span className="text-gray-500">Payment ID:</span> <span className="font-mono text-xs">{order.paymentId}</span></p>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          ))}
-                        </div>
+
+                            {/* Products */}
+                            <div className="bg-white rounded-xl border border-gray-100 p-4">
+                              <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Products Ordered</p>
+                              <div className="space-y-3">
+                                {order.items?.map((item: any) => (
+                                  <div key={item.id} className="flex items-center gap-3">
+                                    {item.product?.image && (
+                                      <img src={item.product.image} alt={item.product.name} className="w-12 h-12 rounded-lg object-cover border border-gray-100" />
+                                    )}
+                                    <div className="flex-1">
+                                      <p className="font-semibold text-gray-900 text-sm">{item.product?.name || 'Product'}</p>
+                                      <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
+                                        {item.size && <span>Size: <strong>{item.size}</strong></span>}
+                                        {item.color && <span>Colour: <strong>{item.color}</strong></span>}
+                                        <span>Qty: <strong>{item.quantity}</strong></span>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="font-black text-sm text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                                      <p className="text-xs text-gray-400">₹{item.price.toLocaleString('en-IN')} each</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Status + Tracking */}
+                            <div className="bg-white rounded-xl border border-gray-100 p-4">
+                              <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Update Order</p>
+                              <div className="flex flex-col sm:flex-row gap-3">
+                                <div className="flex items-center gap-2 flex-1">
+                                  <label className="text-sm text-gray-600 whitespace-nowrap">Status:</label>
+                                  <select
+                                    value={order.status}
+                                    disabled={updatingOrderId === order.id}
+                                    onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:border-black transition disabled:opacity-50"
+                                  >
+                                    <option value="pending">Pending</option>
+                                    <option value="accepted">Accepted</option>
+                                    <option value="packaging">Packaging</option>
+                                    <option value="shipped">Shipped</option>
+                                    <option value="delivered">Delivered</option>
+                                    <option value="cancelled">Cancelled</option>
+                                  </select>
+                                  {updatingOrderId === order.id && (
+                                    <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 flex-1">
+                                  <label className="text-sm text-gray-600 whitespace-nowrap">Tracking ID:</label>
+                                  <input
+                                    type="text"
+                                    value={trackingInputs[order.id] ?? order.trackingId ?? ''}
+                                    onChange={(e) => setTrackingInputs(prev => ({ ...prev, [order.id]: e.target.value }))}
+                                    placeholder="Enter tracking ID"
+                                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black transition"
+                                  />
+                                  <button
+                                    onClick={() => handleSaveTrackingId(order.id)}
+                                    disabled={savingTrackingId === order.id}
+                                    className="px-3 py-2 bg-black text-white text-xs font-bold rounded-lg hover:bg-amber-400 hover:text-black transition disabled:opacity-50"
+                                  >
+                                    {savingTrackingId === order.id ? '...' : 'Save'}
+                                  </button>
+                                </div>
+                              </div>
+                              {order.trackingId && (
+                                <p className="text-xs text-green-600 mt-2 font-medium">Current Tracking ID: <span className="font-mono font-bold">{order.trackingId}</span></p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

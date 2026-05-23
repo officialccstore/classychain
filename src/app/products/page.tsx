@@ -51,12 +51,25 @@ function ProductsPageContent() {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   const categoryIdFromUrl = searchParams.get('categoryId')
+  const subcategoryIdFromUrl = searchParams.get('subcategoryId')
   const familyFromUrl = searchParams.get('family') || ''
 
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => categoryIdFromUrl ? [categoryIdFromUrl] : [])
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([])
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(() => subcategoryIdFromUrl ? [subcategoryIdFromUrl] : [])
   const [selectedFamily, setSelectedFamily] = useState<string>(familyFromUrl)
   const [selectedSubfamily, setSelectedSubfamily] = useState<string>('')
+
+  // Sync filter state whenever URL search params change (e.g. clicking nav category links)
+  useEffect(() => {
+    const catId = searchParams.get('categoryId')
+    const subCatId = searchParams.get('subcategoryId')
+    const family = searchParams.get('family') || ''
+    setSelectedCategories(catId ? [catId] : [])
+    setSelectedSubcategories(subCatId ? [subCatId] : [])
+    setSelectedFamily(family)
+    setSelectedSubfamily('')
+    setPage(1)
+  }, [searchParams.toString()])
   const [sortBy, setSortBy] = useState('featured')
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
@@ -196,7 +209,7 @@ function ProductsPageContent() {
     newest: 'Newest First',
   }
 
-  const FilterSidebar = () => (
+  const filterSidebarContent = (
     <div className="space-y-8">
       {/* Family */}
       <div>
@@ -243,7 +256,7 @@ function ProductsPageContent() {
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Category</h3>
         <div className="space-y-2">
           {categories.length > 0 ? categories
-            .filter(c => selectedSubfamily ? c.subfamilyId === selectedSubfamily : selectedFamily ? c.subfamily?.family === selectedFamily : true)
+            .filter(c => selectedSubfamily ? c.subfamilyId === selectedSubfamily : selectedFamily ? subfamilies.find((sf: any) => sf.id === c.subfamilyId)?.family === selectedFamily : true)
             .map(c => (
               <label key={c.id} className="flex items-center gap-3 cursor-pointer group">
                 <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition ${selectedCategories.includes(c.id) ? 'border-black bg-black' : 'border-gray-300 group-hover:border-gray-500'}`}>
@@ -281,6 +294,7 @@ function ProductsPageContent() {
   )
 
   return (
+
     <div className="min-h-screen bg-white">
       {/* Page Header */}
       <div className="bg-black text-white">
@@ -303,7 +317,7 @@ function ProductsPageContent() {
               </button>
             </div>
             <div className="p-6">
-              <FilterSidebar />
+              {filterSidebarContent}
               <button onClick={() => setMobileFilterOpen(false)} className="mt-8 w-full bg-black text-white py-3 rounded-lg font-bold text-sm uppercase tracking-wide hover:bg-gray-800 transition">
                 Apply Filters
               </button>
@@ -317,7 +331,7 @@ function ProductsPageContent() {
           {/* Desktop Sidebar */}
           <aside className="hidden lg:block w-56 flex-shrink-0">
             <div className="sticky top-24">
-              <FilterSidebar />
+              {filterSidebarContent}
             </div>
           </aside>
 

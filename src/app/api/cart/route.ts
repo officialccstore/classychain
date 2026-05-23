@@ -28,21 +28,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { productId, quantity, sizeVariantId, size } = await request.json()
-    
-    console.log('Cart POST - received:', { productId, quantity, sizeVariantId, size, userId: auth.userId })
+    const { productId, quantity, sizeVariantId, size, color } = await request.json()
+
+    console.log('Cart POST - received:', { productId, quantity, sizeVariantId, size, color, userId: auth.userId })
 
     if (!productId || !quantity) {
       return NextResponse.json({ error: 'Missing productId or quantity' }, { status: 400 })
     }
 
-    // Find existing cart item with same product, sizeVariant, and size
+    // Find existing cart item with same product, sizeVariant, size, and color
     const existingItem = await prisma.cartItem.findFirst({
       where: {
         userId: auth.userId,
         productId,
         sizeVariantId: sizeVariantId || null,
         size: size || null,
+        color: color || null,
       },
     })
     
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
           quantity,
           sizeVariantId: sizeVariantId || null,
           size: size || null,
+          color: color || null,
         },
         include: { product: true, sizeVariant: true },
       })

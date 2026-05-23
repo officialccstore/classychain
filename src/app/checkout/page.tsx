@@ -3,17 +3,20 @@
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle, LogIn, ShoppingBag, Tag, X } from 'lucide-react'
+import { CheckCircle, LogIn, ShoppingBag, Tag, X, Truck } from 'lucide-react'
 
 interface CartItem {
   id: string
   productId: string
   quantity: number
+  size?: string
+  color?: string
   product?: {
     id: string
     name: string
     price: number
     brand: string
+    image?: string
   }
 }
 
@@ -36,10 +39,14 @@ function CheckoutContent() {
   const [shippingZip, setShippingZip] = useState('')
   const [shippingCountry, setShippingCountry] = useState('')
 
+  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay')
+
   const [couponCode, setCouponCode] = useState('')
   const [couponLoading, setCouponLoading] = useState(false)
   const [couponError, setCouponError] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; percentage: number } | null>(null)
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const fetchCart = async () => {
@@ -87,10 +94,10 @@ function CheckoutContent() {
             </div>
           </div>
           <h1 className="text-3xl font-black text-gray-900 mb-2">Order Placed!</h1>
-          <p className="text-gray-500 mb-8">Payment successful. We'll notify you when your order ships.</p>
+          <p className="text-gray-500 mb-8">Your order has been confirmed. We'll notify you when it ships.</p>
           <div className="flex flex-col gap-3">
             <Link href="/profile" className="inline-flex items-center justify-center gap-2 bg-black text-white px-8 py-3 rounded-lg font-bold hover:bg-amber-400 hover:text-black transition">
-              View Order History
+              View My Orders
             </Link>
             <Link href="/products" className="inline-flex items-center justify-center gap-2 border border-gray-200 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:border-black transition text-sm">
               <ShoppingBag className="w-4 h-4" />
@@ -135,6 +142,28 @@ function CheckoutContent() {
     setCouponError('')
   }
 
+  const validateFields = () => {
+    const errors: Record<string, string> = {}
+    if (!shippingName.trim()) errors.name = 'Full name is required'
+    if (!shippingPhone.trim()) errors.phone = 'Phone number is required'
+    if (!shippingLine1.trim()) errors.line1 = 'Address is required'
+    if (!shippingCity.trim()) errors.city = 'City is required'
+    if (!shippingState.trim()) errors.state = 'State is required'
+    if (!shippingZip.trim()) errors.zip = 'PIN code is required'
+    if (!shippingCountry.trim()) errors.country = 'Country is required'
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const buildShippingAddress = () => [
+    shippingName.trim(),
+    shippingPhone.trim() ? `Phone: ${shippingPhone.trim()}` : null,
+    shippingLine1.trim(),
+    shippingLine2.trim() || null,
+    shippingCity.trim() ? `${shippingCity.trim()}, ${shippingState.trim()} ${shippingZip.trim()}` : null,
+    shippingCountry.trim(),
+  ].filter(Boolean).join('\n')
+
   const loadRazorpayScript = (): Promise<boolean> => {
     return new Promise((resolve) => {
       if ((window as any).Razorpay) { resolve(true); return }
@@ -154,42 +183,36 @@ function CheckoutContent() {
       return
     }
 
+    if (!validateFields()) return
+
     setPlacing(true)
     try {
       const token = localStorage.getItem('token')
+      const shippingAddress = buildShippingAddress()
 
-      // Step 1: Create Razorpay order on server
-      const name = shippingName.trim() || user?.name || ''
-      const phone = shippingPhone.trim() || user?.phone || ''
-      const line1 = shippingLine1.trim()
-      const city = shippingCity.trim()
-      const state = shippingState.trim()
-      const zip = shippingZip.trim()
-      const country = shippingCountry.trim()
+      const updatedUser = { ...user, name: shippingName.trim(), phone: shippingPhone.trim(), address: shippingLine1.trim(), city: shippingCity.trim(), state: shippingState.trim(), zipCode: shippingZip.trim(), country: shippingCountry.trim() }
+      setUser(updatedUser)
+      try { localStorage.setItem('user', JSON.stringify(updatedUser)) } catch {}
 
-      if (!line1 || !city || !state || !zip || !country) {
-        alert('Please provide your shipping address before checking out.')
-        setPlacing(false)
+      if (paymentMethod === 'cod') {
+        // Cash on Delivery
+        const codRes = await fetch('/api/orders/cod', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ items: cartItems, total, shippingAddress }),
+        })
+        const codData = await codRes.json()
+        if (codRes.ok && codData.success) {
+          try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
+          router.push('/checkout?success=true')
+        } else {
+          alert(codData.error || 'Failed to place order. Please try again.')
+          setPlacing(false)
+        }
         return
       }
 
-      const shippingAddress = [
-        name,
-        phone ? `Phone: ${phone}` : null,
-        line1,
-        shippingLine2.trim() || null,
-        `${city}, ${state} ${zip}`,
-        country,
-      ]
-        .filter(Boolean)
-        .join('\n')
-
-      const updatedUser = { ...user, name, phone, address: line1, city, state, zipCode: zip, country }
-      setUser(updatedUser)
-      try {
-        localStorage.setItem('user', JSON.stringify(updatedUser))
-      } catch {}
-
+      // Razorpay payment
       const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -198,11 +221,9 @@ function CheckoutContent() {
       const orderData = await orderRes.json()
       if (!orderRes.ok) throw new Error(orderData.error || 'Failed to initiate payment')
 
-      // Step 2: Load Razorpay checkout script
       const loaded = await loadRazorpayScript()
       if (!loaded) throw new Error('Failed to load Razorpay. Please check your internet connection.')
 
-      // Step 3: Open Razorpay payment modal
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -210,21 +231,9 @@ function CheckoutContent() {
         name: 'ClassyChain',
         description: 'Shoe Purchase',
         order_id: orderData.orderId,
-        prefill: { name: user?.name || '', email: user?.email || '' },
+        prefill: { name: shippingName.trim() || user?.name || '', email: user?.email || '', contact: shippingPhone.trim() || user?.phone || '' },
         theme: { color: '#000000' },
         handler: async (response: any) => {
-          // Step 4: Verify signature + create DB order
-          const shippingAddress = [
-            shippingName.trim() || user?.name || '',
-            shippingPhone.trim() ? `Phone: ${shippingPhone.trim()}` : null,
-            shippingLine1.trim(),
-            shippingLine2.trim() || null,
-            shippingCity.trim() ? `${shippingCity.trim()}, ${shippingState.trim()} ${shippingZip.trim()}` : null,
-            shippingCountry.trim(),
-          ]
-            .filter(Boolean)
-            .join('\n')
-
           const verifyRes = await fetch('/api/razorpay/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -246,9 +255,7 @@ function CheckoutContent() {
             setPlacing(false)
           }
         },
-        modal: {
-          ondismiss: () => setPlacing(false),
-        },
+        modal: { ondismiss: () => setPlacing(false) },
       }
 
       const rzp = new (window as any).Razorpay(options)
@@ -285,6 +292,9 @@ function CheckoutContent() {
     )
   }
 
+  const inputCls = (field: string) =>
+    `w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition ${fieldErrors[field] ? 'border-red-400 bg-red-50' : 'border-gray-200'}`
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100">
@@ -303,10 +313,18 @@ function CheckoutContent() {
             </div>
             <div className="divide-y divide-gray-50">
               {cartItems.map((item) => (
-                <div key={item.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                <div key={item.id} className="px-6 py-4 flex items-center gap-4">
+                  {item.product?.image && (
+                    <img src={item.product.image} alt={item.product.name} className="w-14 h-14 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900 line-clamp-2">{item.product?.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{item.product?.brand} · Qty: {item.quantity}</p>
+                    <div className="flex flex-wrap gap-2 mt-0.5">
+                      <p className="text-xs text-gray-400">{item.product?.brand}</p>
+                      {item.size && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">Size: {item.size}</span>}
+                      {item.color && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">Colour: {item.color}</span>}
+                      <span className="text-xs text-gray-400">Qty: {item.quantity}</span>
+                    </div>
                   </div>
                   <p className="font-black text-sm text-black whitespace-nowrap">
                     ₹{((item.product?.price || 0) * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -321,62 +339,105 @@ function CheckoutContent() {
             <div className="bg-white rounded-xl border border-gray-100 p-6">
               <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Shipping Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                <input
-                  type="text"
-                  value={shippingName}
-                  onChange={(e) => setShippingName(e.target.value)}
-                  placeholder="Full name"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
-                <input
-                  type="tel"
-                  value={shippingPhone}
-                  onChange={(e) => setShippingPhone(e.target.value)}
-                  placeholder="Phone number"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
-                <input
-                  type="text"
-                  value={shippingLine1}
-                  onChange={(e) => setShippingLine1(e.target.value)}
-                  placeholder="Address line 1"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
+                <div className="sm:col-span-2">
+                  <input
+                    type="text"
+                    value={shippingName}
+                    onChange={(e) => { setShippingName(e.target.value); setFieldErrors(p => ({ ...p, name: '' })) }}
+                    placeholder="Full Name *"
+                    className={inputCls('name')}
+                  />
+                  {fieldErrors.name && <p className="text-xs text-red-500 mt-1">{fieldErrors.name}</p>}
+                </div>
+                <div className="sm:col-span-2">
+                  <input
+                    type="tel"
+                    value={shippingPhone}
+                    onChange={(e) => { setShippingPhone(e.target.value); setFieldErrors(p => ({ ...p, phone: '' })) }}
+                    placeholder="Phone Number *"
+                    className={inputCls('phone')}
+                  />
+                  {fieldErrors.phone && <p className="text-xs text-red-500 mt-1">{fieldErrors.phone}</p>}
+                </div>
+                <div className="sm:col-span-2">
+                  <input
+                    type="text"
+                    value={shippingLine1}
+                    onChange={(e) => { setShippingLine1(e.target.value); setFieldErrors(p => ({ ...p, line1: '' })) }}
+                    placeholder="Delivery Address *"
+                    className={inputCls('line1')}
+                  />
+                  {fieldErrors.line1 && <p className="text-xs text-red-500 mt-1">{fieldErrors.line1}</p>}
+                </div>
                 <input
                   type="text"
                   value={shippingLine2}
                   onChange={(e) => setShippingLine2(e.target.value)}
                   placeholder="Address line 2 (optional)"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition sm:col-span-2"
                 />
-                <input
-                  type="text"
-                  value={shippingCity}
-                  onChange={(e) => setShippingCity(e.target.value)}
-                  placeholder="City"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
-                <input
-                  type="text"
-                  value={shippingState}
-                  onChange={(e) => setShippingState(e.target.value)}
-                  placeholder="State"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
-                <input
-                  type="text"
-                  value={shippingZip}
-                  onChange={(e) => setShippingZip(e.target.value)}
-                  placeholder="ZIP / Postal code"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
-                <input
-                  type="text"
-                  value={shippingCountry}
-                  onChange={(e) => setShippingCountry(e.target.value)}
-                  placeholder="Country"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition"
-                />
+                <div>
+                  <input
+                    type="text"
+                    value={shippingCity}
+                    onChange={(e) => { setShippingCity(e.target.value); setFieldErrors(p => ({ ...p, city: '' })) }}
+                    placeholder="City *"
+                    className={inputCls('city')}
+                  />
+                  {fieldErrors.city && <p className="text-xs text-red-500 mt-1">{fieldErrors.city}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={shippingState}
+                    onChange={(e) => { setShippingState(e.target.value); setFieldErrors(p => ({ ...p, state: '' })) }}
+                    placeholder="State *"
+                    className={inputCls('state')}
+                  />
+                  {fieldErrors.state && <p className="text-xs text-red-500 mt-1">{fieldErrors.state}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={shippingZip}
+                    onChange={(e) => { setShippingZip(e.target.value); setFieldErrors(p => ({ ...p, zip: '' })) }}
+                    placeholder="PIN Code *"
+                    className={inputCls('zip')}
+                  />
+                  {fieldErrors.zip && <p className="text-xs text-red-500 mt-1">{fieldErrors.zip}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={shippingCountry}
+                    onChange={(e) => { setShippingCountry(e.target.value); setFieldErrors(p => ({ ...p, country: '' })) }}
+                    placeholder="Country *"
+                    className={inputCls('country')}
+                  />
+                  {fieldErrors.country && <p className="text-xs text-red-500 mt-1">{fieldErrors.country}</p>}
+                </div>
+              </div>
+
+              {/* Payment Method */}
+              <h3 className="font-black text-black uppercase tracking-wide text-sm mb-3">Payment Method</h3>
+              <div className="space-y-2 mb-5">
+                <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${paymentMethod === 'razorpay' ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" name="payment" value="razorpay" checked={paymentMethod === 'razorpay'} onChange={() => setPaymentMethod('razorpay')} className="accent-black" />
+                  <div>
+                    <p className="font-bold text-sm text-gray-900">Online Payment</p>
+                    <p className="text-xs text-gray-500">Pay securely via Razorpay (UPI, Cards, Net Banking)</p>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${paymentMethod === 'cod' ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" name="payment" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="accent-black" />
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-gray-600" />
+                    <div>
+                      <p className="font-bold text-sm text-gray-900">Cash on Delivery</p>
+                      <p className="text-xs text-gray-500">Pay when your order arrives</p>
+                    </div>
+                  </div>
+                </label>
               </div>
 
               <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Price Details</h3>
@@ -459,7 +520,9 @@ function CheckoutContent() {
                   </>
                 ) : (
                   <>
-                    {isLoggedIn ? 'Pay Now' : 'Sign In to Pay'}
+                    {isLoggedIn
+                      ? (paymentMethod === 'cod' ? 'Place Order (COD)' : 'Pay Now')
+                      : 'Sign In to Order'}
                     <CheckCircle className="w-4 h-4" />
                   </>
                 )}

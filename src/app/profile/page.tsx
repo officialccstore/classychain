@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { ChevronDown, ChevronRight, Package, RotateCcw, X } from 'lucide-react'
 
 interface UserData {
   id: string
@@ -26,15 +27,30 @@ interface OrderItem {
   id: string
   quantity: number
   price: number
-  product?: { id: string; name: string }
+  size?: string
+  color?: string
+  product?: { id: string; name: string; image?: string }
 }
 
 interface Order {
   id: string
   totalPrice: number
   status: string
+  paymentMethod?: string
+  trackingId?: string
+  shippingAddress?: string
   createdAt: string
   items: OrderItem[]
+}
+
+const statusColors: Record<string, string> = {
+  delivered: 'bg-green-100 text-green-700',
+  shipped: 'bg-purple-100 text-purple-700',
+  packaging: 'bg-amber-100 text-amber-700',
+  accepted: 'bg-blue-100 text-blue-700',
+  pending: 'bg-gray-100 text-gray-600',
+  cancelled: 'bg-red-100 text-red-700',
+  return_requested: 'bg-orange-100 text-orange-700',
 }
 
 export default function ProfilePage() {
@@ -43,15 +59,12 @@ export default function ProfilePage() {
   const [addresses, setAddresses] = useState<Address[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'orders' | 'addresses'>('orders')
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
   const [addressForm, setAddressForm] = useState({
-    label: 'Home',
-    line1: '',
-    line2: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    country: '',
-    isDefault: false,
+    label: 'Home', line1: '', line2: '', city: '', state: '', zipCode: '', country: '', isDefault: false,
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [savingAddress, setSavingAddress] = useState(false)
@@ -65,49 +78,34 @@ export default function ProfilePage() {
   useEffect(() => {
     const storedToken = localStorage.getItem('token')
     const userData = localStorage.getItem('user')
-
     if (storedToken && userData) {
       try {
         setToken(storedToken)
         setUser(JSON.parse(userData))
-      } catch (err) {
+      } catch {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
       }
     }
-
     setIsLoading(false)
   }, [])
 
   useEffect(() => {
+    if (!token) return
     const fetchAddresses = async () => {
-      if (!token) return
       try {
         const res = await fetch('/api/addresses', { headers: { Authorization: `Bearer ${token}` } })
-        if (!res.ok) return
-        const data = await res.json()
-        setAddresses(Array.isArray(data) ? data : [])
-      } catch (e) {
-        console.error('Failed to load addresses', e)
-      }
+        if (res.ok) setAddresses(await res.json().then(d => Array.isArray(d) ? d : []))
+      } catch {}
     }
-
     const fetchOrders = async () => {
-      if (!token) return
       try {
         const res = await fetch('/api/orders', { headers: { Authorization: `Bearer ${token}` } })
-        if (!res.ok) return
-        const data = await res.json()
-        setOrders(Array.isArray(data) ? data : [])
-      } catch (e) {
-        console.error('Failed to load orders', e)
-      }
+        if (res.ok) setOrders(await res.json().then(d => Array.isArray(d) ? d : []))
+      } catch {}
     }
-
-    if (token) {
-      fetchAddresses()
-      fetchOrders()
-    }
+    fetchAddresses()
+    fetchOrders()
   }, [token])
 
   const resetForm = () => {
@@ -125,25 +123,17 @@ export default function ProfilePage() {
         headers: authHeaders,
         body: JSON.stringify(payload),
       })
-
       if (!res.ok) throw new Error('Failed to save address')
       const updated = await res.json()
-
       if (editingId) {
-        setAddresses((prev) => prev.map((addr) => (addr.id === editingId ? updated : addr)))
+        setAddresses(prev => prev.map(a => a.id === editingId ? updated : a))
       } else {
-        setAddresses((prev) => [updated, ...prev.filter((a) => a.id !== updated.id)])
+        setAddresses(prev => [updated, ...prev.filter(a => a.id !== updated.id)])
       }
-
-      // If new default, re-fetch to reflect ordering/default flags
       if (payload.isDefault) {
         const refreshed = await fetch('/api/addresses', { headers: { Authorization: `Bearer ${token}` } })
-        if (refreshed.ok) {
-          const arr = await refreshed.json()
-          setAddresses(Array.isArray(arr) ? arr : [])
-        }
+        if (refreshed.ok) setAddresses(await refreshed.json().then((d: any) => Array.isArray(d) ? d : []))
       }
-
       resetForm()
     } catch (e) {
       console.error(e)
@@ -154,48 +144,47 @@ export default function ProfilePage() {
 
   const handleEdit = (addr: Address) => {
     setEditingId(addr.id)
-    setAddressForm({
-      label: addr.label,
-      line1: addr.line1,
-      line2: addr.line2 || '',
-      city: addr.city,
-      state: addr.state,
-      zipCode: addr.zipCode,
-      country: addr.country,
-      isDefault: addr.isDefault,
-    })
+    setAddressForm({ label: addr.label, line1: addr.line1, line2: addr.line2 || '', city: addr.city, state: addr.state, zipCode: addr.zipCode, country: addr.country, isDefault: addr.isDefault })
   }
 
   const handleDelete = async (id: string) => {
     if (!token) return
     try {
-      const res = await fetch(`/api/addresses/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok) throw new Error('Failed to delete address')
-      setAddresses((prev) => prev.filter((a) => a.id !== id))
+      await fetch(`/api/addresses/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      setAddresses(prev => prev.filter(a => a.id !== id))
       if (editingId === id) resetForm()
-    } catch (e) {
-      console.error(e)
-    }
+    } catch {}
   }
 
   const handleSetDefault = async (id: string) => {
     if (!token) return
     try {
-      const target = addresses.find((a) => a.id === id)
-      if (!target) return
-      const res = await fetch(`/api/addresses/${id}`, {
-        method: 'PUT',
-        headers: authHeaders,
-        body: JSON.stringify({ isDefault: true }),
-      })
-      if (!res.ok) throw new Error('Failed to update default')
+      await fetch(`/api/addresses/${id}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ isDefault: true }) })
       const refreshed = await fetch('/api/addresses', { headers: { Authorization: `Bearer ${token}` } })
-      if (refreshed.ok) {
-        const arr = await refreshed.json()
-        setAddresses(Array.isArray(arr) ? arr : [])
+      if (refreshed.ok) setAddresses(await refreshed.json().then((d: any) => Array.isArray(d) ? d : []))
+    } catch {}
+  }
+
+  const handleOrderAction = async (orderId: string, action: 'cancel' | 'return') => {
+    if (!token) return
+    setActionLoading(orderId)
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({ action }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || 'Failed to process request')
+        return
       }
-    } catch (e) {
-      console.error(e)
+      const updated = await res.json()
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: updated.status } : o))
+    } catch {
+      alert('Something went wrong. Please try again.')
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -224,134 +213,246 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
+        {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-gray-500">Account</p>
             <h1 className="text-4xl font-bold text-gray-900">My Profile</h1>
-            <p className="text-gray-600 mt-1">Manage your addresses and keep track of your orders.</p>
+          </div>
+          <button
+            onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login' }}
+            className="text-sm text-red-500 hover:text-red-700 font-semibold transition"
+          >
+            Sign Out
+          </button>
+        </div>
+
+        {/* User Info Card */}
+        <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center text-white font-black text-lg flex-shrink-0">
+            {user.name?.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-lg">{user.name}</p>
+            <p className="text-gray-500 text-sm">{user.email}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1">
-            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 space-y-3">
-              <div className="inline-flex items-center gap-3 rounded-full px-4 py-2 bg-gray-100 text-gray-700 font-medium w-fit">{user.name}</div>
-              <div className="text-gray-700 font-semibold text-lg">{user.email}</div>
-              <p className="text-sm text-gray-500">Keep your info current to ensure smooth deliveries.</p>
+        {/* Tab Switcher */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-5 py-2.5 rounded-lg text-sm font-bold transition ${activeTab === 'orders' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}
+          >
+            My Orders ({orders.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('addresses')}
+            className={`px-5 py-2.5 rounded-lg text-sm font-bold transition ${activeTab === 'addresses' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}
+          >
+            Addresses ({addresses.length})
+          </button>
+        </div>
+
+        {/* Orders Tab */}
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            {orders.length === 0 ? (
+              <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center">
+                <Package className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No orders yet.</p>
+                <Link href="/products" className="inline-block mt-4 bg-black text-white px-6 py-2.5 rounded-lg font-bold text-sm hover:bg-amber-400 hover:text-black transition">
+                  Start Shopping
+                </Link>
+              </div>
+            ) : (
+              orders.map((order) => {
+                const isExpanded = expandedOrderId === order.id
+                const canCancel = ['pending', 'accepted'].includes(order.status)
+                const canReturn = order.status === 'delivered'
+
+                return (
+                  <div key={order.id} className="bg-white border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+                    {/* Order Bar */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-6 py-4">
+                      <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Order ID</p>
+                          <p className="font-mono text-xs font-bold text-gray-700">#{order.id.slice(-8).toUpperCase()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Date</p>
+                          <p className="text-gray-700 text-xs">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Amount</p>
+                          <p className="font-black text-gray-900">₹{order.totalPrice.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Status</p>
+                          <span className={`inline-block text-xs px-2.5 py-1 rounded-full font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-600'}`}>
+                            {order.status?.toUpperCase().replace('_', ' ')}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-black border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 transition whitespace-nowrap"
+                      >
+                        {isExpanded ? 'Hide Details' : 'View Details'}
+                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* Expanded Order Details */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-gray-50 px-6 py-5 space-y-5">
+                        {/* Products */}
+                        <div>
+                          <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Items Ordered</p>
+                          <div className="space-y-3">
+                            {order.items.map((item) => (
+                              <div key={item.id} className="flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-100">
+                                {item.product?.image && (
+                                  <img src={item.product.image} alt={item.product.name} className="w-14 h-14 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-gray-900 text-sm">{item.product?.name || 'Product'}</p>
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    {item.size && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">Size: {item.size}</span>}
+                                    {item.color && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">Colour: {item.color}</span>}
+                                    <span className="text-xs text-gray-400">Qty: {item.quantity}</span>
+                                  </div>
+                                </div>
+                                <p className="font-black text-sm text-gray-900 whitespace-nowrap">₹{(item.price * item.quantity).toFixed(2)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Order Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="bg-white rounded-xl border border-gray-100 p-4 text-sm space-y-1.5">
+                            <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Payment Info</p>
+                            <p><span className="text-gray-500">Method:</span> <span className="font-semibold">{order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online Payment'}</span></p>
+                            <p><span className="text-gray-500">Status:</span> <span className={`font-bold ${order.paymentMethod === 'cod' ? 'text-yellow-600' : 'text-green-600'}`}>{order.paymentMethod === 'cod' ? 'Pay on Delivery' : 'Paid'}</span></p>
+                            <p><span className="text-gray-500">Total:</span> <span className="font-black text-black">₹{order.totalPrice.toFixed(2)}</span></p>
+                          </div>
+                          {(order.trackingId || order.shippingAddress) && (
+                            <div className="bg-white rounded-xl border border-gray-100 p-4 text-sm space-y-1.5">
+                              <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Delivery Info</p>
+                              {order.trackingId && (
+                                <p><span className="text-gray-500">Tracking ID:</span> <span className="font-mono font-bold text-black">{order.trackingId}</span></p>
+                              )}
+                              {order.shippingAddress && (
+                                <p><span className="text-gray-500">Address:</span> <span className="font-medium whitespace-pre-line">{order.shippingAddress}</span></p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        {(canCancel || canReturn) && (
+                          <div className="flex gap-3">
+                            {canCancel && (
+                              <button
+                                onClick={() => handleOrderAction(order.id, 'cancel')}
+                                disabled={actionLoading === order.id}
+                                className="flex items-center gap-2 bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition disabled:opacity-50"
+                              >
+                                {actionLoading === order.id ? <span className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" /> : <X className="w-4 h-4" />}
+                                Cancel Order
+                              </button>
+                            )}
+                            {canReturn && (
+                              <button
+                                onClick={() => handleOrderAction(order.id, 'return')}
+                                disabled={actionLoading === order.id}
+                                className="flex items-center gap-2 bg-orange-50 text-orange-600 border border-orange-200 px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-600 hover:text-white hover:border-orange-600 transition disabled:opacity-50"
+                              >
+                                {actionLoading === order.id ? <span className="w-4 h-4 border-2 border-orange-300 border-t-orange-600 rounded-full animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                                Request Return / Exchange
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )}
+
+        {/* Addresses Tab */}
+        {activeTab === 'addresses' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Add / Edit Form */}
+            <div className="lg:col-span-1">
+              <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900">{editingId ? 'Edit Address' : 'Add Address'}</h3>
+                  {editingId && <button onClick={resetForm} className="text-sm text-blue-600 hover:underline">Cancel</button>}
+                </div>
+                <div className="space-y-3">
+                  <input value={addressForm.label} onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })} placeholder="Label (Home, Work)" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                  <input value={addressForm.line1} onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })} placeholder="Address line 1 *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                  <input value={addressForm.line2} onChange={(e) => setAddressForm({ ...addressForm, line2: e.target.value })} placeholder="Address line 2 (optional)" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} placeholder="City *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                    <input value={addressForm.state} onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })} placeholder="State *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={addressForm.zipCode} onChange={(e) => setAddressForm({ ...addressForm, zipCode: e.target.value })} placeholder="PIN Code *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                    <input value={addressForm.country} onChange={(e) => setAddressForm({ ...addressForm, country: e.target.value })} placeholder="Country *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={addressForm.isDefault} onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })} />
+                    Set as default shipping address
+                  </label>
+                  <button onClick={handleSaveAddress} disabled={savingAddress} className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition disabled:opacity-60 text-sm">
+                    {savingAddress ? 'Saving…' : editingId ? 'Update Address' : 'Save Address'}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 mt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Add / Edit Address</h3>
-                {editingId && (
-                  <button onClick={resetForm} className="text-sm text-blue-600 hover:underline">Cancel edit</button>
+            {/* Saved Addresses */}
+            <div className="lg:col-span-2">
+              <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">Saved Addresses</h3>
+                  <span className="text-sm text-gray-500">{addresses.length} saved</span>
+                </div>
+                {addresses.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No addresses yet. Add one to speed up checkout.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {addresses.map((addr) => (
+                      <div key={addr.id} className="border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-gray-900">{addr.label}</p>
+                            {addr.isDefault && <span className="px-2 py-0.5 text-xs rounded-full bg-black text-white">Default</span>}
+                          </div>
+                          <p className="text-gray-700 text-sm mt-1">{addr.line1}{addr.line2 ? `, ${addr.line2}` : ''}</p>
+                          <p className="text-gray-700 text-sm">{addr.city}, {addr.state} {addr.zipCode}</p>
+                          <p className="text-gray-700 text-sm">{addr.country}</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                          {!addr.isDefault && <button onClick={() => handleSetDefault(addr.id)} className="text-blue-600 hover:underline">Set default</button>}
+                          <button onClick={() => handleEdit(addr)} className="text-gray-800 hover:underline">Edit</button>
+                          <button onClick={() => handleDelete(addr.id)} className="text-red-600 hover:underline">Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-              <div className="space-y-3">
-                <input value={addressForm.label} onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })} placeholder="Label (Home, Work)" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                <input value={addressForm.line1} onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })} placeholder="Address line 1" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                <input value={addressForm.line2} onChange={(e) => setAddressForm({ ...addressForm, line2: e.target.value })} placeholder="Address line 2 (optional)" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} placeholder="City" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                  <input value={addressForm.state} onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })} placeholder="State" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input value={addressForm.zipCode} onChange={(e) => setAddressForm({ ...addressForm, zipCode: e.target.value })} placeholder="ZIP / Postal" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                  <input value={addressForm.country} onChange={(e) => setAddressForm({ ...addressForm, country: e.target.value })} placeholder="Country" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none" />
-                </div>
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={addressForm.isDefault} onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })} />
-                  Set as default shipping address
-                </label>
-                <button
-                  onClick={handleSaveAddress}
-                  disabled={savingAddress}
-                  className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition disabled:opacity-60"
-                >
-                  {savingAddress ? 'Saving…' : editingId ? 'Update Address' : 'Save Address'}
-                </button>
-              </div>
             </div>
           </div>
-
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Saved Addresses</h3>
-                <span className="text-sm text-gray-500">{addresses.length} saved</span>
-              </div>
-              {addresses.length === 0 ? (
-                <p className="text-gray-500">No addresses yet. Add one to speed up checkout.</p>
-              ) : (
-                <div className="space-y-4">
-                  {addresses.map((addr) => (
-                    <div key={addr.id} className="border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-gray-900">{addr.label}</p>
-                          {addr.isDefault && <span className="px-2 py-0.5 text-xs rounded-full bg-black text-white">Default</span>}
-                        </div>
-                        <p className="text-gray-700 text-sm mt-1">{addr.line1}{addr.line2 ? `, ${addr.line2}` : ''}</p>
-                        <p className="text-gray-700 text-sm">{addr.city}, {addr.state} {addr.zipCode}</p>
-                        <p className="text-gray-700 text-sm">{addr.country}</p>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        {!addr.isDefault && (
-                          <button onClick={() => handleSetDefault(addr.id)} className="text-blue-600 hover:underline">Set default</button>
-                        )}
-                        <button onClick={() => handleEdit(addr)} className="text-gray-800 hover:underline">Edit</button>
-                        <button onClick={() => handleDelete(addr.id)} className="text-red-600 hover:underline">Delete</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Order History</h3>
-                <span className="text-sm text-gray-500">{orders.length} order{orders.length === 1 ? '' : 's'}</span>
-              </div>
-              {orders.length === 0 ? (
-                <div className="text-gray-500">
-                  <p>No orders yet. Start shopping now!</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {orders.map((order) => (
-                    <div key={order.id} className="border border-gray-200 rounded-xl p-4 space-y-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div>
-                          <p className="text-sm text-gray-500">Order ID: {order.id}</p>
-                          <p className="text-gray-900 font-semibold">₹{order.totalPrice.toFixed(2)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
-                          <span className={`inline-block text-xs px-3 py-1 rounded-full font-bold ${
-                            order.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                            order.status === 'shipped'   ? 'bg-purple-100 text-purple-700' :
-                            order.status === 'packaging' ? 'bg-amber-100 text-amber-700' :
-                            order.status === 'accepted'  ? 'bg-blue-100 text-blue-700' :
-                            'bg-gray-100 text-gray-600'
-                          }`}>{(order.status || 'pending').toUpperCase()}</span>
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        {order.items.map((item) => (
-                          <div key={item.id} className="flex items-center justify-between">
-                            <span>{item.product?.name || 'Product'} × {item.quantity}</span>
-                            <span>₹{(item.price * item.quantity).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

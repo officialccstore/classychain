@@ -25,7 +25,10 @@ export async function GET(request: Request) {
 
     // Fetch all orders with items and user info
     const allOrders = await prisma.order.findMany({
-      include: { items: { include: { product: true } } },
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true } },
+      },
       orderBy: { createdAt: 'asc' },
     })
 
@@ -114,12 +117,13 @@ export async function GET(request: Request) {
     const recentOrders = allOrders
       .slice(-5)
       .reverse()
-      .map((o: { id: string; totalPrice: number; status: string; items: { quantity: number }[]; createdAt: Date }) => ({
+      .map((o: any) => ({
         id: o.id,
         totalPrice: o.totalPrice,
         status: o.status,
         itemCount: o.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0),
         createdAt: o.createdAt,
+        customerName: o.user?.name || 'Guest',
       }))
 
     return NextResponse.json({

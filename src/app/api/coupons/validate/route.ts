@@ -24,6 +24,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Invalid or expired coupon code' }, { status: 404 })
     }
 
+    // Increment usage count
+    await prisma.coupon.update({
+      where: { id: coupon.id },
+      data: { usageCount: { increment: 1 } },
+    })
+
     return NextResponse.json({ code: coupon.code, percentage: coupon.percentage })
   } catch (error) {
     console.error('Failed to validate coupon:', error)

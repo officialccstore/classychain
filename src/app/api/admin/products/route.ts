@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, description, mrp, price, image, images, categoryId, subcategoryId, brand, sizeVariants } = await request.json()
+    const { name, description, mrp, price, image, images, categoryId, subcategoryId, brand, sizeVariants, tags, colors, material, features, specifications } = await request.json()
 
     if (!name || !mrp || !price || !categoryId || !brand) {
       return NextResponse.json(
@@ -34,8 +34,13 @@ export async function POST(request: Request) {
         image,
         images: images || [],
         categoryId,
-        subcategoryId: subcategoryId || undefined, // Convert empty string to undefined
+        subcategoryId: subcategoryId || undefined,
         brand,
+        tags: tags || [],
+        colors: colors || [],
+        material: material || undefined,
+        features: features || undefined,
+        specifications: specifications || undefined,
         sizeVariants: sizeVariants && sizeVariants.length > 0 ? {
           create: sizeVariants
         } : undefined

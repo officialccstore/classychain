@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getTokenFromReq, verifyToken } from '@/lib/auth'
 
-const ORDER_STATUSES = ['accepted', 'packaging', 'shipped', 'delivered']
+const ORDER_STATUSES = ['pending', 'accepted', 'packaging', 'shipped', 'delivered', 'cancelled']
 
 function isAdminFromReq(req: any) {
   const token = getTokenFromReq(req)
@@ -17,24 +17,41 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { status } = await request.json()
+    const body = await request.json()
+    const { status, trackingId } = body
 
-    if (!status || !ORDER_STATUSES.includes(status)) {
-      return NextResponse.json(
-        { error: `Invalid status. Must be one of: ${ORDER_STATUSES.join(', ')}` },
-        { status: 400 }
-      )
+    const updateData: any = {}
+
+    if (status) {
+      if (!ORDER_STATUSES.includes(status)) {
+        return NextResponse.json(
+          { error: `Invalid status. Must be one of: ${ORDER_STATUSES.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      updateData.status = status
+    }
+
+    if (trackingId !== undefined) {
+      updateData.trackingId = trackingId
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
     }
 
     const order = await prisma.order.update({
       where: { id: params.id },
-      data: { status },
-      include: { items: { include: { product: true } } },
+      data: updateData,
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true, email: true, phone: true, address: true, city: true, state: true, zipCode: true, country: true } },
+      },
     })
 
     return NextResponse.json(order)
   } catch (error) {
-    console.error('Failed to update order status:', error)
-    return NextResponse.json({ error: 'Failed to update order status' }, { status: 500 })
+    console.error('Failed to update order:', error)
+    return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
   }
 }

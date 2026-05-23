@@ -3,9 +3,15 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, Heart, ChevronLeft, ChevronRight, ArrowRight, Truck, RefreshCw, Shield } from 'lucide-react'
+import { ShoppingCart, Heart, ChevronLeft, ChevronRight, ArrowRight, Truck, RefreshCw, Shield, ChevronDown, ChevronUp, Tag } from 'lucide-react'
 import { showToast } from '@/components/Toast'
 import { LogoWithText } from '@/components/Logo'
+
+interface SizeVariant {
+  id: string
+  size: string
+  quantity: number
+}
 
 interface Product {
   id: string
@@ -20,8 +26,46 @@ interface Product {
   brand: string
   rating: number
   stock?: number
-  sizeVariants?: { id: string; size: string; quantity: number }[]
+  sizeVariants?: SizeVariant[]
   reviews?: any[]
+  tags?: string[]
+  colors?: string[]
+  material?: string
+  features?: string
+  specifications?: string
+}
+
+// Size conversion tables (UK base)
+const SIZE_CONVERSIONS: Record<string, Record<string, string>> = {
+  '3':  { UK: '3',  US: '4',  EUR: '36' },
+  '4':  { UK: '4',  US: '5',  EUR: '37' },
+  '5':  { UK: '5',  US: '6',  EUR: '38' },
+  '6':  { UK: '6',  US: '7',  EUR: '39' },
+  '7':  { UK: '7',  US: '8',  EUR: '40' },
+  '8':  { UK: '8',  US: '9',  EUR: '41' },
+  '9':  { UK: '9',  US: '10', EUR: '42' },
+  '10': { UK: '10', US: '11', EUR: '43' },
+  '11': { UK: '11', US: '12', EUR: '44' },
+  '12': { UK: '12', US: '13', EUR: '45' },
+}
+
+function convertSize(ukSize: string, format: 'UK' | 'US' | 'EUR'): string {
+  const entry = SIZE_CONVERSIONS[ukSize]
+  if (entry) return entry[format] || ukSize
+  return ukSize
+}
+
+function AccordionSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border-t border-gray-100">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between py-4 text-sm font-bold text-gray-800 hover:text-black transition">
+        {title}
+        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+      </button>
+      {open && <div className="pb-4 text-sm text-gray-600 leading-relaxed">{children}</div>}
+    </div>
+  )
 }
 
 export default function ProductDetailPage() {
@@ -31,6 +75,8 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
+  const [selectedColor, setSelectedColor] = useState<string | null>(null)
+  const [sizeFormat, setSizeFormat] = useState<'UK' | 'US' | 'EUR'>('UK')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [adding, setAdding] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
@@ -43,12 +89,15 @@ export default function ProductDetailPage() {
         const data = await response.json()
         setProduct(data)
         if (data?.sizeVariants?.length > 0) {
-          const first = data.sizeVariants.find((v: any) => v.quantity > 0) || data.sizeVariants[0]
+          const first = data.sizeVariants.find((v: SizeVariant) => v.quantity > 0) || data.sizeVariants[0]
           setSelectedVariantId(first?.id || null)
           if (first) {
             const sizes = first.size.includes(',') ? first.size.split(',').map((s: string) => s.trim()) : [first.size]
             setSelectedSize(sizes[0])
           }
+        }
+        if (data?.colors?.length > 0) {
+          setSelectedColor(data.colors[0])
         }
         if (data?.categoryId || data?.category?.id) {
           const categoryId = data.categoryId || data.category?.id
@@ -82,7 +131,7 @@ export default function ProductDetailPage() {
         const res = await fetch('/api/cart', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ productId: product?.id, quantity, sizeVariantId: selectedVariantId, size: selectedSize }),
+          body: JSON.stringify({ productId: product?.id, quantity, sizeVariantId: selectedVariantId, size: selectedSize, color: selectedColor }),
         })
         if (res.ok) {
           showToast(`Added to cart!`, 'success', 3000)
@@ -92,9 +141,9 @@ export default function ProductDetailPage() {
         }
       } else {
         const pendingCart = JSON.parse(localStorage.getItem('pendingCart') || '[]')
-        const existing = pendingCart.find((it: any) => it.productId === product?.id && it.sizeVariantId === selectedVariantId && it.size === selectedSize)
+        const existing = pendingCart.find((it: any) => it.productId === product?.id && it.sizeVariantId === selectedVariantId && it.size === selectedSize && it.color === selectedColor)
         if (existing) existing.quantity += quantity
-        else pendingCart.push({ productId: product?.id, quantity, sizeVariantId: selectedVariantId, size: selectedSize })
+        else pendingCart.push({ productId: product?.id, quantity, sizeVariantId: selectedVariantId, size: selectedSize, color: selectedColor })
         localStorage.setItem('pendingCart', JSON.stringify(pendingCart))
         showToast(`Added to cart!`, 'success', 3000)
         try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
@@ -164,29 +213,18 @@ export default function ProductDetailPage() {
             <div className="relative bg-gray-50 rounded-2xl overflow-hidden aspect-square group">
               {allImages.length > 0 ? (
                 <>
-                  <img
-                    src={allImages[currentImageIndex]}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={allImages[currentImageIndex]} alt={product.name} className="w-full h-full object-cover" />
                   {allImages.length > 1 && (
                     <>
-                      <button
-                        onClick={() => setCurrentImageIndex(i => (i - 1 + allImages.length) % allImages.length)}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50"
-                      >
+                      <button onClick={() => setCurrentImageIndex(i => (i - 1 + allImages.length) % allImages.length)} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50">
                         <ChevronLeft className="w-5 h-5" />
                       </button>
-                      <button
-                        onClick={() => setCurrentImageIndex(i => (i + 1) % allImages.length)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50"
-                      >
+                      <button onClick={() => setCurrentImageIndex(i => (i + 1) % allImages.length)} className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50">
                         <ChevronRight className="w-5 h-5" />
                       </button>
                       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
                         {allImages.map((_, i) => (
-                          <button key={i} onClick={() => setCurrentImageIndex(i)}
-                            className={`h-1.5 rounded-full transition-all ${i === currentImageIndex ? 'w-6 bg-black' : 'w-1.5 bg-black/30'}`} />
+                          <button key={i} onClick={() => setCurrentImageIndex(i)} className={`h-1.5 rounded-full transition-all ${i === currentImageIndex ? 'w-6 bg-black' : 'w-1.5 bg-black/30'}`} />
                         ))}
                       </div>
                     </>
@@ -201,13 +239,10 @@ export default function ProductDetailPage() {
                 </div>
               )}
             </div>
-
-            {/* Thumbnails */}
             {allImages.length > 1 && (
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                 {allImages.map((img, i) => (
-                  <button key={i} onClick={() => setCurrentImageIndex(i)}
-                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === currentImageIndex ? 'border-black' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                  <button key={i} onClick={() => setCurrentImageIndex(i)} className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === currentImageIndex ? 'border-black' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                     <img src={img} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
@@ -217,11 +252,21 @@ export default function ProductDetailPage() {
 
           {/* Product Info */}
           <div className="flex flex-col">
-            {categoryName && (
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{categoryName}</p>
-            )}
+            {categoryName && <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{categoryName}</p>}
             <h1 className="text-3xl sm:text-4xl font-black text-black mb-1 leading-tight">{product.name}</h1>
-            {product.brand && <p className="text-sm text-gray-500 font-medium mb-5">{product.brand}</p>}
+            {product.brand && <p className="text-sm text-gray-500 font-medium mb-4">{product.brand}</p>}
+
+            {/* Tags */}
+            {product.tags && product.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {product.tags.map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-medium">
+                    <Tag className="w-3 h-3" />
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Price */}
             <div className="flex items-baseline gap-3 mb-2 flex-wrap">
@@ -234,24 +279,56 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Stock */}
-            <p className={`text-sm font-bold mb-6 ${totalStock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+            <p className={`text-sm font-bold mb-5 ${totalStock > 0 ? 'text-green-600' : 'text-red-500'}`}>
               {totalStock > 0 ? '✓ In Stock' : '✗ Out of Stock'}
             </p>
 
-            <p className="text-gray-600 text-sm leading-relaxed mb-7">{product.description}</p>
+            <p className="text-gray-600 text-sm leading-relaxed mb-6">{product.description}</p>
+
+            {/* Color Selection */}
+            {product.colors && product.colors.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-gray-700">Select Colour</h4>
+                  {selectedColor && <span className="text-xs text-gray-500">Selected: <strong>{selectedColor}</strong></span>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {product.colors.map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedColor(color)}
+                      className={`px-4 py-2 border-2 rounded-lg text-sm font-bold transition-all ${selectedColor === color ? 'border-black bg-black text-white' : 'border-gray-200 text-gray-700 hover:border-gray-400'}`}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Size Selection */}
             {product.sizeVariants && product.sizeVariants.length > 0 && (
               <div className="mb-7">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-black uppercase tracking-wider text-gray-700">Select Size</h4>
-                  {selectedSize && <span className="text-xs text-gray-500">Selected: <strong>{selectedSize}</strong></span>}
+                  {/* Size Format Toggle */}
+                  <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                    {(['UK', 'US', 'EUR'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => setSizeFormat(fmt)}
+                        className={`px-2.5 py-1 text-xs font-bold transition ${sizeFormat === fmt ? 'bg-black text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {product.sizeVariants.map((v) => {
                     const sizes = v.size.includes(',') ? v.size.split(',').map(s => s.trim()) : [v.size]
                     return sizes.map((size, sizeIdx) => {
+                      const displaySize = convertSize(size, sizeFormat)
                       const isSelected = selectedVariantId === v.id && selectedSize === size
                       const isOOS = v.quantity === 0
                       return (
@@ -259,22 +336,24 @@ export default function ProductDetailPage() {
                           key={`${v.id}-${sizeIdx}`}
                           onClick={() => { setSelectedVariantId(v.id); setSelectedSize(size) }}
                           disabled={isOOS}
+                          title={`UK ${size} = US ${convertSize(size, 'US')} = EUR ${convertSize(size, 'EUR')}`}
                           className={`relative min-w-[52px] px-4 py-2.5 border-2 rounded-lg text-sm font-bold transition-all
                             ${isSelected ? 'border-black bg-black text-white' :
                               isOOS ? 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed' :
                               'border-gray-200 bg-white text-gray-800 hover:border-gray-400'}`}
                         >
-                          {isOOS && (
-                            <span className="absolute inset-0 flex items-center justify-center">
-                              <span className="w-full h-0.5 bg-gray-300 rotate-45 absolute" />
-                            </span>
-                          )}
-                          <span className="relative">{size}</span>
+                          {isOOS && <span className="absolute inset-0 flex items-center justify-center"><span className="w-full h-0.5 bg-gray-300 rotate-45 absolute" /></span>}
+                          <span className="relative">{displaySize}</span>
                         </button>
                       )
                     })
                   })}
                 </div>
+                {selectedSize && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    UK {selectedSize} = US {convertSize(selectedSize, 'US')} = EUR {convertSize(selectedSize, 'EUR')}
+                  </p>
+                )}
               </div>
             )}
 
@@ -302,7 +381,7 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Promises */}
-            <div className="border-t border-gray-100 pt-6 space-y-3">
+            <div className="border-t border-gray-100 pt-5 space-y-2.5">
               {[
                 { icon: <Truck className="w-4 h-4" />, text: 'Free shipping on all orders' },
                 { icon: <RefreshCw className="w-4 h-4" />, text: '7-day easy returns' },
@@ -313,6 +392,28 @@ export default function ProductDetailPage() {
                   {p.text}
                 </div>
               ))}
+            </div>
+
+            {/* Product Details Accordion */}
+            <div className="mt-5">
+              {product.material && (
+                <AccordionSection title="Material">
+                  <p>{product.material}</p>
+                </AccordionSection>
+              )}
+              {product.features && (
+                <AccordionSection title="Features">
+                  <p className="whitespace-pre-line">{product.features}</p>
+                </AccordionSection>
+              )}
+              {product.specifications && (
+                <AccordionSection title="Specifications">
+                  <p className="whitespace-pre-line">{product.specifications}</p>
+                </AccordionSection>
+              )}
+              <AccordionSection title="Product Description">
+                <p>{product.description}</p>
+              </AccordionSection>
             </div>
           </div>
         </div>
@@ -342,6 +443,13 @@ export default function ProductDetailPage() {
                     </div>
                     <div className="p-3">
                       <h3 className="text-sm font-bold text-gray-900 line-clamp-2 mb-1 group-hover:text-black">{rp.name}</h3>
+                      {rp.tags && rp.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {rp.tags.slice(0, 2).map((tag) => (
+                            <span key={tag} className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{tag}</span>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-baseline gap-2">
                         <span className="font-black text-black">₹{rp.price.toLocaleString('en-IN')}</span>
                         {rp.mrp && rp.mrp > rp.price && (
