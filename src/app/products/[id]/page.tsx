@@ -112,6 +112,7 @@ export default function ProductDetailPage() {
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [selectedColor, setSelectedColor] = useState<string | null>(null)
   const [sizeChartOpen, setSizeChartOpen] = useState(false)
+  const [zoomPos, setZoomPos] = useState<{ x: number; y: number } | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [adding, setAdding] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
@@ -246,11 +247,29 @@ export default function ProductDetailPage() {
 
           {/* Image Gallery */}
           <div>
-            <div className="relative bg-gray-50 rounded-2xl overflow-hidden aspect-square group">
+            <div
+              className="relative bg-gray-50 rounded-2xl overflow-hidden aspect-square group cursor-zoom-in"
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setZoomPos({
+                  x: ((e.clientX - rect.left) / rect.width) * 100,
+                  y: ((e.clientY - rect.top) / rect.height) * 100,
+                })
+              }}
+              onMouseLeave={() => setZoomPos(null)}
+            >
               {allImages.length > 0 ? (
                 <>
-                  <img src={allImages[currentImageIndex]} alt={product.name} className="w-full h-full object-cover" />
-                  {allImages.length > 1 && (
+                  <img
+                    src={allImages[currentImageIndex]}
+                    alt={product.name}
+                    className="w-full h-full object-cover transition-transform duration-100"
+                    style={zoomPos ? {
+                      transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                      transform: 'scale(2.2)',
+                    } : {}}
+                  />
+                  {!zoomPos && allImages.length > 1 && (
                     <>
                       <button onClick={() => setCurrentImageIndex(i => (i - 1 + allImages.length) % allImages.length)} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50">
                         <ChevronLeft className="w-5 h-5" />
@@ -278,7 +297,12 @@ export default function ProductDetailPage() {
             {allImages.length > 1 && (
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                 {allImages.map((img, i) => (
-                  <button key={i} onClick={() => setCurrentImageIndex(i)} className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === currentImageIndex ? 'border-black' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                  <button
+                    key={i}
+                    onMouseEnter={() => setCurrentImageIndex(i)}
+                    onClick={() => setCurrentImageIndex(i)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === currentImageIndex ? 'border-black' : 'border-transparent opacity-60 hover:opacity-100 hover:border-gray-300'}`}
+                  >
                     <img src={img} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
