@@ -313,7 +313,7 @@ export default function CartPage() {
                         <h3 className="font-bold text-gray-900 text-sm sm:text-base line-clamp-2 hover:text-black">{item.product.name}</h3>
                       </Link>
                       {item.size && (
-                        <p className="text-xs text-gray-500 mt-1">Size: <span className="font-semibold">{item.size}</span></p>
+                        <p className="text-xs text-gray-500 mt-1">UK Size: <span className="font-semibold">{item.size}</span></p>
                       )}
                     </div>
                     <button

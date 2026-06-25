@@ -3,7 +3,19 @@
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle, LogIn, ShoppingBag, Tag, X, Truck } from 'lucide-react'
+import { CheckCircle, LogIn, ShoppingBag, Tag, X, Truck, MapPin, Plus } from 'lucide-react'
+
+interface Address {
+  id: string
+  label: string
+  line1: string
+  line2?: string | null
+  city: string
+  state: string
+  zipCode: string
+  country: string
+  isDefault: boolean
+}
 
 interface CartItem {
   id: string
@@ -38,6 +50,9 @@ function CheckoutContent() {
   const [shippingState, setShippingState] = useState('')
   const [shippingZip, setShippingZip] = useState('')
   const [shippingCountry, setShippingCountry] = useState('')
+
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
 
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay')
 
@@ -74,13 +89,27 @@ function CheckoutContent() {
         setUser(parsed)
         setShippingName(parsed.name || '')
         setShippingPhone(parsed.phone || '')
-        setShippingLine1(parsed.address || '')
-        setShippingCity(parsed.city || '')
-        setShippingState(parsed.state || '')
-        setShippingZip(parsed.zipCode || '')
-        setShippingCountry(parsed.country || '')
       }
     } catch {}
+
+    if (token) {
+      fetch('/api/addresses', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then((addrs: Address[]) => {
+          if (!Array.isArray(addrs) || addrs.length === 0) return
+          setSavedAddresses(addrs)
+          const def = addrs.find(a => a.isDefault) || addrs[0]
+          setSelectedAddressId(def.id)
+          setShippingLine1(def.line1)
+          setShippingLine2(def.line2 || '')
+          setShippingCity(def.city)
+          setShippingState(def.state)
+          setShippingZip(def.zipCode)
+          setShippingCountry(def.country)
+        })
+        .catch(() => {})
+    }
+
     fetchCart()
   }, [])
 
@@ -140,6 +169,17 @@ function CheckoutContent() {
     setAppliedCoupon(null)
     setCouponCode('')
     setCouponError('')
+  }
+
+  const selectAddress = (addr: Address) => {
+    setSelectedAddressId(addr.id)
+    setShippingLine1(addr.line1)
+    setShippingLine2(addr.line2 || '')
+    setShippingCity(addr.city)
+    setShippingState(addr.state)
+    setShippingZip(addr.zipCode)
+    setShippingCountry(addr.country)
+    setFieldErrors({})
   }
 
   const validateFields = () => {
@@ -321,7 +361,7 @@ function CheckoutContent() {
                     <p className="font-bold text-sm text-gray-900 line-clamp-2">{item.product?.name}</p>
                     <div className="flex flex-wrap gap-2 mt-0.5">
                       <p className="text-xs text-gray-400">{item.product?.brand}</p>
-                      {item.size && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">Size: {item.size}</span>}
+                      {item.size && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">UK Size: {item.size}</span>}
                       {item.color && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">Colour: {item.color}</span>}
                       <span className="text-xs text-gray-400">Qty: {item.quantity}</span>
                     </div>
@@ -337,7 +377,54 @@ function CheckoutContent() {
           {/* Summary + payment */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-xl border border-gray-100 p-6">
-              <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Shipping Information</h3>
+              <h3 className="font-black text-black uppercase tracking-wide text-sm mb-4">Shipping Information</h3>
+
+              {/* Saved address picker */}
+              {isLoggedIn && savedAddresses.length > 0 && (
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Saved Addresses</p>
+                    <Link href="/profile" className="text-xs font-bold text-black hover:underline">Manage</Link>
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-2 -mx-1 px-1">
+                    {savedAddresses.map(addr => {
+                      const active = selectedAddressId === addr.id
+                      return (
+                        <button
+                          key={addr.id}
+                          type="button"
+                          onClick={() => selectAddress(addr)}
+                          className={`flex-shrink-0 text-left border-2 rounded-xl p-3 w-48 transition-all ${active ? 'border-black bg-black/[0.04]' : 'border-gray-200 hover:border-gray-400'}`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5 gap-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <MapPin className="w-3 h-3 flex-shrink-0 text-gray-500" />
+                              <span className="text-xs font-black uppercase tracking-wide truncate">{addr.label}</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {addr.isDefault && (
+                                <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-bold leading-tight">Default</span>
+                              )}
+                              {active && <CheckCircle className="w-3.5 h-3.5 text-black" />}
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-700 line-clamp-2 leading-snug">{addr.line1}{addr.line2 ? `, ${addr.line2}` : ''}</p>
+                          <p className="text-xs text-gray-400 mt-0.5 truncate">{addr.city}, {addr.state} {addr.zipCode}</p>
+                        </button>
+                      )
+                    })}
+                    <Link
+                      href="/profile"
+                      className="flex-shrink-0 border-2 border-dashed border-gray-200 rounded-xl p-3 w-36 flex flex-col items-center justify-center gap-1.5 hover:border-gray-400 hover:bg-gray-50 transition"
+                    >
+                      <Plus className="w-5 h-5 text-gray-400" />
+                      <span className="text-xs text-gray-400 font-medium text-center leading-tight">Add new address</span>
+                    </Link>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">You can also edit the details below for this order.</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
                 <div className="sm:col-span-2">
                   <input

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Star, Truck, RefreshCw, Shield, Flame, ChevronDown } from "lucide-react";
+import { ArrowRight, Star, Truck, RefreshCw, Shield, Flame, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { LogoWithText } from "@/components/Logo";
 
@@ -19,21 +19,16 @@ interface Category {
   name: string;
 }
 
-// Reliable Unsplash shoe shots — used as slide backgrounds
-const SLIDE_BG = [
-  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1800&q=85&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=1800&q=85&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=1800&q=85&auto=format&fit=crop",
-];
-
 export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [heroProducts, setHeroProducts] = useState<Product[]>([]);
+  const [homeReels, setHomeReels] = useState<{ id: string; url: string; title: string }[]>([]);
   const [scrollY, setScrollY] = useState(0);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [dealActive, setDealActive] = useState(false);
   const heroRef = useRef<HTMLElement>(null);
 
   // Parallax scroll listener — passive for performance
@@ -60,6 +55,20 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch("/api/reels?page=home")
+      .then((r) => r.json())
+      .then((data) => { if (data.reels) setHomeReels(data.reels); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/deal")
+      .then((r) => r.json())
+      .then((data) => setDealActive(!!data.deal))
+      .catch(() => {});
+  }, []);
+
   const heroSlides = [
     {
       subtitle: "New Season · 2026",
@@ -81,11 +90,6 @@ export default function Home() {
     },
   ];
 
-  const reels = [
-    { id: "DQ4HFBMkgY7", title: "Dwarka Ramphal Chowk walk-through" },
-    { id: "DRBifF4EpAX", title: "Sneaker wall highlight" },
-    { id: "DRL2O5_kkVp", title: "Store drop teaser" },
-  ];
 
   const reviews = [
     {
@@ -136,8 +140,7 @@ export default function Home() {
           />
 
           {heroSlides.map((slide, idx) => {
-            // Use hero products from DB; fall back to SLIDE_BG if not loaded yet
-            const heroImg = heroProducts[idx]?.image || SLIDE_BG[idx];
+            const heroImg = heroProducts[idx]?.image;
             const shoeImg = heroImg;
 
             return (
@@ -290,6 +293,22 @@ export default function Home() {
             );
           })}
 
+          {/* ── Prev / Next arrows ── */}
+          <button
+            onClick={() => setCurrentSlide(p => (p - 1 + heroSlides.length) % heroSlides.length)}
+            aria-label="Previous slide"
+            className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white transition"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setCurrentSlide(p => (p + 1) % heroSlides.length)}
+            aria-label="Next slide"
+            className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white transition"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+
           {/* ── Slide indicators ── */}
           <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-4">
             {heroSlides.map((_, idx) => (
@@ -340,23 +359,25 @@ export default function Home() {
         {/* ═══════════════════════════════════════
             DEAL OF THE DAY
         ═══════════════════════════════════════ */}
-        <section className="bg-amber-400">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-4">
-              <Flame className="w-5 h-5 text-black flex-shrink-0" />
-              <div>
-                <p className="font-black text-black text-sm uppercase tracking-widest">Deal of the Day</p>
-                <p className="text-black/60 text-xs">Today only — don&apos;t let this one walk away</p>
+        {dealActive && (
+          <section className="bg-amber-400">
+            <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-4">
+                <Flame className="w-5 h-5 text-black flex-shrink-0" />
+                <div>
+                  <p className="font-black text-black text-sm uppercase tracking-widest">Deal of the Day</p>
+                  <p className="text-black/60 text-xs">Today only — don&apos;t let this one walk away</p>
+                </div>
               </div>
+              <Link
+                href="/deals"
+                className="inline-flex items-center gap-2 bg-black text-white px-6 py-2.5 font-black text-[11px] uppercase tracking-widest hover:bg-gray-900 transition whitespace-nowrap"
+              >
+                View Deals <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-            <Link
-              href="/deals"
-              className="inline-flex items-center gap-2 bg-black text-white px-6 py-2.5 font-black text-[11px] uppercase tracking-widest hover:bg-gray-900 transition whitespace-nowrap"
-            >
-              View Deals <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* ═══════════════════════════════════════
             COLLECTIONS
@@ -511,23 +532,30 @@ export default function Home() {
               <h2 className="text-4xl sm:text-5xl font-black text-black leading-tight">From Instagram</h2>
               <p className="text-gray-400 mt-3 text-sm">ClassyChain showrooms &amp; new drops</p>
             </div>
-            <div className="grid gap-5 md:grid-cols-3">
-              {reels.map((reel) => (
-                <div key={reel.id} className="overflow-hidden bg-[#0d0d0d]">
-                  <div className="aspect-[9/16] w-full">
-                    <iframe
-                      src={`https://www.instagram.com/reel/${reel.id}/embed`}
-                      title={reel.title}
-                      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-                      className="h-full w-full"
-                    />
-                  </div>
-                  <div className="p-4 border-t border-white/5">
-                    <p className="text-sm font-semibold text-white/60">{reel.title}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {homeReels.length > 0 && (
+              <div className="grid gap-5 md:grid-cols-3">
+                {homeReels.map((reel) => {
+                  const embedUrl = reel.url.replace(/\/?$/, '/') + 'embed';
+                  return (
+                    <div key={reel.id} className="overflow-hidden bg-[#0d0d0d]">
+                      <div className="aspect-[9/16] w-full">
+                        <iframe
+                          src={embedUrl}
+                          title={reel.title}
+                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                          className="h-full w-full"
+                        />
+                      </div>
+                      {reel.title && (
+                        <div className="p-4 border-t border-white/5">
+                          <p className="text-sm font-semibold text-white/60">{reel.title}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </section>
 

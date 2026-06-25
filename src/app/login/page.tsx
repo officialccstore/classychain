@@ -2,46 +2,42 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff } from 'lucide-react'
 import { showToast } from '@/components/Toast'
 import { LogoWithText } from '@/components/Logo'
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google'
+import { Phone, ArrowLeft, RefreshCw } from 'lucide-react'
+
+type Step = 'phone' | 'otp'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [step, setStep] = useState<Step>('phone')
+  const [phone, setPhone] = useState('')
+  const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
 
   const handleLoginSuccess = async (token: string, user: any) => {
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(user))
 
-    // Move pending cart to user's account
     const pendingCart = localStorage.getItem('pendingCart')
     if (pendingCart) {
       try {
         const cartItems = JSON.parse(pendingCart)
         await fetch('/api/cart/merge', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ items: cartItems }),
         })
         localStorage.removeItem('pendingCart')
-        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
         showToast('Cart items transferred to your account!', 'success', 3000)
-      } catch (cartError) {
-        console.error('Failed to merge cart:', cartError)
-      }
+      } catch {}
     }
 
     const urlParams = new URL(window.location.href).searchParams
@@ -49,28 +45,79 @@ export default function LoginPage() {
     window.location.href = redirect
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const startResendCooldown = () => {
+    setResendCooldown(30)
+    const timer = setInterval(() => {
+      setResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
+  const handleSendOtp = async () => {
+    if (!/^\d{10}$/.test(phone)) {
+      setError('Enter a valid 10-digit mobile number')
+      return
+    }
     setLoading(true)
     setError('')
-
     try {
-      const response = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.toLowerCase(), password }),
+        body: JSON.stringify({ phone }),
       })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Failed to send OTP'); return }
+      setStep('otp')
+      startResendCooldown()
+      showToast('OTP sent to your number!', 'success', 3000)
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      if (!response.ok) {
-        const data = await response.json()
-        setError(data.error || 'Login failed')
-        return
-      }
-
-      const data = await response.json()
+  const handleVerifyOtp = async () => {
+    if (!/^\d{6}$/.test(otp)) { setError('Enter the 6-digit OTP'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Invalid OTP'); return }
+      showToast('Logged in successfully!', 'success', 2000)
       await handleLoginSuccess(data.token, data.user)
-    } catch (error) {
-      setError('An error occurred. Please try again.')
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return
+    setOtp('')
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Failed to resend OTP'); return }
+      startResendCooldown()
+      showToast('New OTP sent!', 'success', 2000)
+    } catch {
+      setError('Failed to resend OTP.')
     } finally {
       setLoading(false)
     }
@@ -81,22 +128,16 @@ export default function LoginPage() {
     setGoogleLoading(true)
     setError('')
     try {
-      const response = await fetch('/api/auth/google', {
+      const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: credentialResponse.credential }),
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        setError(data.error || 'Google login failed')
-        return
-      }
-
-      const data = await response.json()
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Google login failed'); return }
       showToast('Signed in with Google!', 'success', 3000)
       await handleLoginSuccess(data.token, data.user)
-    } catch (err) {
+    } catch {
       setError('Google login failed. Please try again.')
     } finally {
       setGoogleLoading(false)
@@ -105,106 +146,131 @@ export default function LoginPage() {
 
   const handleContinueAsGuest = () => {
     const urlParams = new URL(window.location.href).searchParams
-    const next = urlParams.get('redirect') || urlParams.get('next') || '/products'
-    window.location.href = next
+    window.location.href = urlParams.get('redirect') || urlParams.get('next') || '/products'
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary to-gray-800 flex items-center justify-center px-4">
-      <div className="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="flex justify-center mb-6">
           <LogoWithText size="md" variant="default" />
         </div>
-        <h1 className="text-3xl font-bold mb-2 text-center">Welcome Back</h1>
-        <p className="text-gray-600 text-center mb-6">Login to your ClassyChain account</p>
+        <h1 className="text-2xl font-black text-center text-gray-900 mb-1">Welcome Back</h1>
+        <p className="text-gray-500 text-center text-sm mb-6">Sign in to your ClassyChain account</p>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">
             {error}
           </div>
         )}
 
         {/* Google Sign-In */}
-        <div className="mb-4">
-          <div className={googleLoading ? 'opacity-60 pointer-events-none' : ''}>
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError('Google login failed. Please try again.')}
-              width="100%"
-              shape="rectangular"
-              theme="outline"
-              text="continue_with"
-              logo_alignment="left"
-            />
-          </div>
+        <div className={`mb-5 ${googleLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError('Google login failed. Please try again.')}
+            width="100%"
+            shape="rectangular"
+            theme="outline"
+            text="continue_with"
+            logo_alignment="left"
+          />
         </div>
 
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-sm text-gray-400 font-medium">or</span>
+          <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">or</span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-secondary focus:border-transparent outline-none"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-secondary focus:border-transparent outline-none"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-gray-500"
-              >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
+        {/* Phone OTP */}
+        {step === 'phone' ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Mobile Number
+              </label>
+              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-black focus-within:ring-1 focus-within:ring-black transition">
+                <span className="px-3 py-2.5 bg-gray-50 border-r border-gray-200 text-sm font-semibold text-gray-500 select-none">+91</span>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={phone}
+                  onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
+                  placeholder="Enter 10-digit number"
+                  className="flex-1 px-3 py-2.5 text-sm outline-none bg-white"
+                />
+              </div>
             </div>
+            <button
+              onClick={handleSendOtp}
+              disabled={loading || phone.length !== 10}
+              className="w-full flex items-center justify-center gap-2 bg-black text-white py-2.5 rounded-lg font-bold text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+            >
+              {loading ? (
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <><Phone className="w-4 h-4" /> Send OTP</>
+              )}
+            </button>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <button
+                onClick={() => { setStep('phone'); setOtp(''); setError('') }}
+                className="text-gray-400 hover:text-black transition"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <p className="text-sm text-gray-600">
+                OTP sent to <span className="font-bold text-black">+91 {phone}</span>
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Enter 6-digit OTP
+              </label>
+              <input
+                type="tel"
+                maxLength={6}
+                value={otp}
+                onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
+                placeholder="• • • • • •"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-center text-xl font-bold tracking-[0.5em] focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={handleVerifyOtp}
+              disabled={loading || otp.length !== 6}
+              className="w-full bg-black text-white py-2.5 rounded-lg font-bold text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+            >
+              {loading ? (
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+              ) : 'Verify & Login'}
+            </button>
+            <button
+              onClick={handleResend}
+              disabled={resendCooldown > 0 || loading}
+              className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-black disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+            </button>
+          </div>
+        )}
 
+        <div className="mt-5 pt-5 border-t border-gray-100">
           <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-secondary text-black py-2 rounded-lg font-bold hover:bg-yellow-400 transition disabled:bg-gray-300"
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-          <button
-            type="button"
             onClick={handleContinueAsGuest}
-            className="w-full border border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
+            className="w-full border border-gray-200 text-gray-600 py-2.5 rounded-lg font-semibold text-sm hover:border-gray-400 hover:text-black transition"
           >
             Continue as Guest
           </button>
-        </form>
-
-        <p className="text-center text-gray-600 mt-6">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-secondary font-bold hover:underline">
-            Sign up
-          </Link>
-        </p>
+        </div>
       </div>
     </div>
   )

@@ -53,6 +53,7 @@ function ProductsPageContent() {
   const categoryIdFromUrl = searchParams.get('categoryId')
   const subcategoryIdFromUrl = searchParams.get('subcategoryId')
   const familyFromUrl = searchParams.get('family') || ''
+  const searchQuery = searchParams.get('search') || ''
 
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => categoryIdFromUrl ? [categoryIdFromUrl] : [])
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(() => subcategoryIdFromUrl ? [subcategoryIdFromUrl] : [])
@@ -77,6 +78,8 @@ function ProductsPageContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [addingId, setAddingId] = useState<string | null>(null)
   const [sortOpen, setSortOpen] = useState(false)
+  const [sizePickerProduct, setSizePickerProduct] = useState<Product | null>(null)
+  const [selectedSize, setSelectedSize] = useState<string | null>(null)
 
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem('token'))
@@ -91,17 +94,16 @@ function ProductsPageContent() {
       .catch(() => {})
   }, [])
 
-  const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const doAddToCart = async (product: Product, size?: string) => {
     setAddingId(product.id)
     try {
+      const sizeVariantId = size ? product.sizeVariants?.find(sv => sv.size === size)?.id : undefined
       if (isLoggedIn) {
         const token = localStorage.getItem('token')
         const res = await fetch('/api/cart', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ productId: product.id, quantity: 1 }),
+          body: JSON.stringify({ productId: product.id, quantity: 1, ...(size ? { size } : {}), ...(sizeVariantId ? { sizeVariantId } : {}) }),
         })
         if (res.ok) {
           showToast(`${product.name} added to cart!`, 'success', 3000)
@@ -111,9 +113,9 @@ function ProductsPageContent() {
         }
       } else {
         const pendingCart = JSON.parse(localStorage.getItem('pendingCart') || '[]')
-        const existing = pendingCart.find((item: any) => item.productId === product.id)
+        const existing = pendingCart.find((item: any) => item.productId === product.id && item.size === (size || null))
         if (existing) existing.quantity += 1
-        else pendingCart.push({ productId: product.id, quantity: 1, sizeVariantId: null })
+        else pendingCart.push({ productId: product.id, quantity: 1, size: size || null, sizeVariantId: sizeVariantId || null })
         localStorage.setItem('pendingCart', JSON.stringify(pendingCart))
         showToast(`${product.name} added to cart!`, 'success', 3000)
         window.dispatchEvent(new CustomEvent('cartUpdated'))
@@ -123,6 +125,18 @@ function ProductsPageContent() {
     } finally {
       setAddingId(null)
     }
+  }
+
+  const handleAddToCart = (e: React.MouseEvent, product: Product) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const availableSizes = product.sizeVariants?.filter(sv => sv.quantity > 0) || []
+    if (availableSizes.length > 0) {
+      setSizePickerProduct(product)
+      setSelectedSize(null)
+      return
+    }
+    doAddToCart(product)
   }
 
   useEffect(() => {
@@ -137,6 +151,7 @@ function ProductsPageContent() {
         if (selectedCategories.length > 0) params.append('categoryId', selectedCategories[0])
         if (selectedSubcategories.length > 0) params.append('subcategoryId', selectedSubcategories[0])
         if (sortBy) params.append('sort', sortBy)
+        if (searchQuery) params.append('search', searchQuery)
 
         const res = await fetch(`/api/products?${params.toString()}`)
         if (!res.ok) throw new Error()
@@ -163,7 +178,7 @@ function ProductsPageContent() {
       }
     }
     fetchProducts()
-  }, [selectedCategories, selectedSubcategories, selectedFamily, selectedSubfamily, page, sortBy])
+  }, [selectedCategories, selectedSubcategories, selectedFamily, selectedSubfamily, page, sortBy, searchQuery])
 
   const handleCategoryChange = (id: string) => {
     setSelectedCategories(prev => prev.includes(id) ? prev.filter(c => c !== id) : [id])
@@ -296,6 +311,59 @@ function ProductsPageContent() {
   return (
 
     <div className="min-h-screen bg-white">
+      {/* Size Picker Modal */}
+      {sizePickerProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60"
+          onClick={() => setSizePickerProduct(null)}
+        >
+          <div
+            className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-black text-lg text-black">Select Size <span className="text-sm text-gray-400 font-semibold">(UK)</span></h3>
+              <button onClick={() => setSizePickerProduct(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4 line-clamp-1">{sizePickerProduct.name}</p>
+            <div className="grid grid-cols-4 gap-2 mb-6">
+              {(sizePickerProduct.sizeVariants?.filter(sv => sv.quantity > 0) || []).map(sv => (
+                <button
+                  key={sv.id}
+                  type="button"
+                  onClick={() => setSelectedSize(sv.size)}
+                  className={`py-2.5 text-sm font-bold rounded-lg border-2 transition ${
+                    selectedSize === sv.size
+                      ? 'border-black bg-black text-white'
+                      : 'border-gray-200 hover:border-gray-400 text-gray-800'
+                  }`}
+                >
+                  {sv.size}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={!selectedSize || addingId === sizePickerProduct.id}
+              onClick={async () => {
+                if (!selectedSize) return
+                const product = sizePickerProduct
+                setSizePickerProduct(null)
+                await doAddToCart(product, selectedSize)
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-black text-white py-3 rounded-lg font-bold text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+            >
+              {addingId === sizePickerProduct.id ? (
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <><ShoppingCart className="w-4 h-4" /> Add to Cart</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
       {/* Page Header */}
       <div className="bg-black text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">

@@ -319,7 +319,7 @@ export default function ProfilePage() {
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold text-gray-900 text-sm">{item.product?.name || 'Product'}</p>
                                   <div className="flex flex-wrap gap-2 mt-1">
-                                    {item.size && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">Size: {item.size}</span>}
+                                    {item.size && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">UK Size: {item.size}</span>}
                                     {item.color && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">Colour: {item.color}</span>}
                                     <span className="text-xs text-gray-400">Qty: {item.quantity}</span>
                                   </div>

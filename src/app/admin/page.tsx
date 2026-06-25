@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import ImageUpload from '@/components/ImageUpload';
-import { Package, Tag, LayoutGrid, Ticket, ChevronDown, ChevronRight, Pencil, Trash2, Plus, AlertCircle, CheckCircle, X, ShoppingBag, BarChart2, TrendingUp, Users, IndianRupee, Settings, LogOut, UserPlus, Pencil as PencilIcon } from 'lucide-react';
+import { Package, Tag, LayoutGrid, Ticket, ChevronDown, ChevronRight, Pencil, Trash2, Plus, AlertCircle, CheckCircle, X, ShoppingBag, BarChart2, TrendingUp, Users, IndianRupee, Settings, LogOut, UserPlus, Pencil as PencilIcon, Eye, EyeOff, Flame, Video, Clock, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -48,11 +48,12 @@ interface Product {
   categoryId: string;
   subcategoryId?: string;
   sizeVariants?: SizeVariant[];
+  isVisible: boolean;
 }
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'subfamilies' | 'coupons' | 'orders' | 'settings' | 'homepage'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'subfamilies' | 'coupons' | 'orders' | 'settings' | 'homepage' | 'reels' | 'deals'>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -131,6 +132,25 @@ export default function AdminPage() {
   const [homepageSaving, setHomepageSaving] = useState<'featured' | 'hero' | null>(null);
   const [homepageSaveMsg, setHomepageSaveMsg] = useState('');
   const [homepageSearch, setHomepageSearch] = useState('');
+  const [homepageProductsError, setHomepageProductsError] = useState('');
+
+  // Reels state
+  interface Reel { id: string; url: string; title: string; page: 'home' | 'about' | 'both' }
+  const [reels, setReels] = useState<Reel[]>([]);
+  const [reelsSaving, setReelsSaving] = useState(false);
+  const [reelsSaveMsg, setReelsSaveMsg] = useState('');
+  const [newReel, setNewReel] = useState<{ url: string; title: string; page: 'home' | 'about' | 'both' }>({ url: '', title: '', page: 'both' });
+
+  // Deal of the Day state
+  interface DealProduct { id: string; name: string; price: number; mrp?: number; image: string; brand: string }
+  const [dealProducts, setDealProducts] = useState<DealProduct[]>([]);
+  const [dealStartDate, setDealStartDate] = useState('');
+  const [dealEndDate, setDealEndDate] = useState('');
+  const [dealSearch, setDealSearch] = useState('');
+  const [dealSearchResults, setDealSearchResults] = useState<DealProduct[]>([]);
+  const [dealSaving, setDealSaving] = useState(false);
+  const [dealSaveMsg, setDealSaveMsg] = useState('');
+  const [dealSearchLoading, setDealSearchLoading] = useState(false);
 
   // Load admin name on mount
   useEffect(() => {
@@ -148,6 +168,8 @@ export default function AdminPage() {
     if (activeTab === 'orders') fetchOrders();
     if (activeTab === 'dashboard') fetchAnalytics();
     if (activeTab === 'homepage') fetchHomepageConfig();
+    if (activeTab === 'reels') fetchReels();
+    if (activeTab === 'deals') fetchDeal();
     if (activeTab === 'settings') {
       try {
         const userData = localStorage.getItem('user');
@@ -164,17 +186,19 @@ export default function AdminPage() {
     const token = localStorage.getItem('token');
 
     // Load products independently so a config failure doesn't block the picker
+    setHomepageProductsError('');
     try {
       const prodRes = await fetch('/api/products?limit=200');
       if (prodRes.ok) {
         const prodData = await prodRes.json();
         const prods = Array.isArray(prodData.products) ? prodData.products : Array.isArray(prodData) ? prodData : [];
         setAllProductsForHomepage(prods);
+        if (prods.length === 0) setHomepageProductsError('No products found in the database.');
       } else {
-        console.error('Products API returned', prodRes.status);
+        setHomepageProductsError(`Failed to load products (${prodRes.status}). Check server logs.`);
       }
     } catch (err) {
-      console.error('Failed to load products for homepage picker:', err);
+      setHomepageProductsError('Network error loading products. Is the server running?');
     }
 
     // Load saved config separately
@@ -190,6 +214,74 @@ export default function AdminPage() {
     } catch (err) {
       console.error('Failed to load homepage config:', err);
     }
+  };
+
+  const fetchReels = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/reels', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (res.ok) { const d = await res.json(); setReels(d.reels || []); }
+    } catch {}
+  };
+
+  const saveReels = async (updated: any[]) => {
+    setReelsSaving(true); setReelsSaveMsg('');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/reels', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ reels: updated }) });
+      if (!res.ok) throw new Error();
+      setReelsSaveMsg('Reels saved!');
+    } catch { setReelsSaveMsg('Save failed.'); }
+    finally { setReelsSaving(false); setTimeout(() => setReelsSaveMsg(''), 3000); }
+  };
+
+  const fetchDeal = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/deal', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.deal) {
+          const ids: string[] = d.deal.productIds || (d.deal.productId ? [d.deal.productId] : []);
+          if (ids.length > 0) {
+            const fetched = await Promise.all(ids.map((id: string) => fetch(`/api/products/${id}`).then(r => r.ok ? r.json() : null)));
+            setDealProducts(fetched.filter(Boolean));
+          }
+          setDealStartDate(d.deal.startDate ? d.deal.startDate.slice(0, 16) : '');
+          setDealEndDate(d.deal.endDate ? d.deal.endDate.slice(0, 16) : '');
+        }
+      }
+    } catch {}
+  };
+
+  const searchDealProducts = async (q: string) => {
+    if (!q.trim()) { setDealSearchResults([]); return; }
+    setDealSearchLoading(true);
+    try {
+      const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&limit=10`);
+      if (res.ok) { const d = await res.json(); setDealSearchResults(Array.isArray(d.products) ? d.products : []); }
+    } catch {} finally { setDealSearchLoading(false); }
+  };
+
+  const saveDeal = async () => {
+    if (dealProducts.length === 0 || !dealStartDate || !dealEndDate) { setDealSaveMsg('Add at least one product, start date, and end date.'); return; }
+    setDealSaving(true); setDealSaveMsg('');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: { productIds: dealProducts.map(p => p.id), startDate: new Date(dealStartDate).toISOString(), endDate: new Date(dealEndDate).toISOString() } }) });
+      if (!res.ok) throw new Error();
+      setDealSaveMsg('Deal of the Day saved!');
+    } catch { setDealSaveMsg('Save failed.'); }
+    finally { setDealSaving(false); setTimeout(() => setDealSaveMsg(''), 3000); }
+  };
+
+  const clearDeal = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: null }) });
+      setDealProducts([]); setDealStartDate(''); setDealEndDate(''); setDealSaveMsg('Deal cleared.');
+      setTimeout(() => setDealSaveMsg(''), 3000);
+    } catch {}
   };
 
   const saveHomepage = async (type: 'featured' | 'hero', ids: string[]) => {
@@ -570,6 +662,21 @@ export default function AdminPage() {
     }
   };
 
+  const handleToggleVisibility = async (product: Product) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/admin/products/${product.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ isVisible: !product.isVisible }),
+      });
+      if (!res.ok) throw new Error('Failed to update visibility');
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isVisible: !product.isVisible } : p));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error updating visibility');
+    }
+  };
+
   // Category handlers
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -859,6 +966,8 @@ export default function AdminPage() {
     { id: 'orders', label: 'Orders', icon: <ShoppingBag className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'homepage', label: 'Homepage', icon: <LayoutGrid className="w-4 h-4" /> },
+    { id: 'reels', label: 'Reels', icon: <Video className="w-4 h-4" /> },
+    { id: 'deals', label: 'Deals', icon: <Flame className="w-4 h-4" /> },
   ] as const;
 
   const inputCls = "w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition";
@@ -920,7 +1029,10 @@ export default function AdminPage() {
                activeTab === 'subfamilies' ? 'Manage Subfamilies' :
                activeTab === 'categories' ? 'Manage Categories' :
                activeTab === 'orders' ? 'Manage Orders' :
-               activeTab === 'settings' ? 'Settings' : 'Manage Coupons'}
+               activeTab === 'settings' ? 'Settings' :
+               activeTab === 'homepage' ? 'Manage Homepage' :
+               activeTab === 'reels' ? 'Manage Reels' :
+               activeTab === 'deals' ? 'Deal of the Day' : 'Manage Coupons'}
             </h1>
           </div>
           <div className="flex items-center gap-4">
@@ -1417,7 +1529,7 @@ export default function AdminPage() {
                   <div>
                     <div className="divide-y divide-gray-50">
                       {products.map(product => (
-                        <div key={product.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition">
+                        <div key={product.id} className={`flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition ${!product.isVisible ? 'opacity-50' : ''}`}>
                           {/* Thumbnail */}
                           <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
                             {product.image ? (
@@ -1430,6 +1542,9 @@ export default function AdminPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                               <h3 className="font-bold text-sm text-gray-900 truncate">{product.name}</h3>
+                              {!product.isVisible && (
+                                <span className="bg-gray-200 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase flex-shrink-0">Hidden</span>
+                              )}
                               {isOutOfStock(product.sizeVariants) && (
                                 <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase flex-shrink-0">Out of Stock</span>
                               )}
@@ -1444,7 +1559,15 @@ export default function AdminPage() {
                             </div>
                           </div>
                           {/* Actions */}
-                          <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => handleToggleVisibility(product)}
+                              title={product.isVisible ? 'Hide product' : 'Show product'}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${product.isVisible ? 'border-gray-200 text-gray-600 hover:border-gray-400 hover:text-black' : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                            >
+                              {product.isVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                              {product.isVisible ? 'Hide' : 'Show'}
+                            </button>
                             <button onClick={() => handleEditProduct(product)} className={editBtn}>
                               <Pencil className="w-3.5 h-3.5" /> Edit
                             </button>
@@ -2149,20 +2272,26 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {allProductsForHomepage.length === 0 ? (
+                {homepageProductsError && allProductsForHomepage.length === 0 ? (
+                  <p className="text-red-500 text-sm py-6 text-center">{homepageProductsError}</p>
+                ) : allProductsForHomepage.length === 0 ? (
                   <p className="text-gray-400 text-sm py-6 text-center">Loading products…</p>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-5">
-                    {allProductsForHomepage.filter(p => !homepageSearch || p.name.toLowerCase().includes(homepageSearch.toLowerCase()) || p.brand.toLowerCase().includes(homepageSearch.toLowerCase())).map(product => {
+                    {allProductsForHomepage.filter(p => !homepageSearch || p.name.toLowerCase().includes(homepageSearch.toLowerCase()) || (p.brand || '').toLowerCase().includes(homepageSearch.toLowerCase())).map(product => {
                       const selected = homepageFeaturedIds.includes(product.id);
                       return (
                         <button
+                          type="button"
                           key={product.id}
                           onClick={() => {
                             if (selected) {
                               setHomepageFeaturedIds(ids => ids.filter(id => id !== product.id));
-                            } else if (homepageFeaturedIds.length < 4) {
-                              setHomepageFeaturedIds(ids => [...ids, product.id]);
+                            } else {
+                              setHomepageFeaturedIds(ids => {
+                                const without = ids.filter(id => id !== product.id);
+                                return without.length >= 4 ? [...without.slice(1), product.id] : [...without, product.id];
+                              });
                             }
                           }}
                           className={`relative rounded-xl border-2 overflow-hidden text-left transition-all ${selected ? 'border-black shadow-md' : 'border-gray-200 hover:border-gray-400'}`}
@@ -2212,20 +2341,26 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {allProductsForHomepage.length === 0 ? (
+                {homepageProductsError && allProductsForHomepage.length === 0 ? (
+                  <p className="text-red-500 text-sm py-6 text-center">{homepageProductsError}</p>
+                ) : allProductsForHomepage.length === 0 ? (
                   <p className="text-gray-400 text-sm py-6 text-center">Loading products…</p>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-5">
-                    {allProductsForHomepage.filter(p => !homepageSearch || p.name.toLowerCase().includes(homepageSearch.toLowerCase()) || p.brand.toLowerCase().includes(homepageSearch.toLowerCase())).map(product => {
+                    {allProductsForHomepage.filter(p => !homepageSearch || p.name.toLowerCase().includes(homepageSearch.toLowerCase()) || (p.brand || '').toLowerCase().includes(homepageSearch.toLowerCase())).map(product => {
                       const selected = homepageHeroIds.includes(product.id);
                       return (
                         <button
+                          type="button"
                           key={product.id}
                           onClick={() => {
                             if (selected) {
                               setHomepageHeroIds(ids => ids.filter(id => id !== product.id));
-                            } else if (homepageHeroIds.length < 3) {
-                              setHomepageHeroIds(ids => [...ids, product.id]);
+                            } else {
+                              setHomepageHeroIds(ids => {
+                                const without = ids.filter(id => id !== product.id);
+                                return without.length >= 3 ? [...without.slice(1), product.id] : [...without, product.id];
+                              });
                             }
                           }}
                           className={`relative rounded-xl border-2 overflow-hidden text-left transition-all ${selected ? 'border-black shadow-md' : 'border-gray-200 hover:border-gray-400'}`}
@@ -2256,6 +2391,212 @@ export default function AdminPage() {
 
             </div>
           )}
+
+        {/* ── Reels Tab ── */}
+        {activeTab === 'reels' && (
+          <div className="p-6 sm:p-8 max-w-3xl">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-base font-black text-black">Add Reel</h2>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${reels.length >= 3 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{reels.length}/3</span>
+              </div>
+              <p className="text-xs text-gray-400 mb-5">{reels.length >= 3 ? 'Maximum 3 reels reached. Remove one to add another.' : 'Paste an Instagram or YouTube Reel URL'}</p>
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>Reel URL</label>
+                  <input value={newReel.url} onChange={e => setNewReel(r => ({ ...r, url: e.target.value }))} placeholder="https://www.instagram.com/reel/..." className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Title (optional)</label>
+                  <input value={newReel.title} onChange={e => setNewReel(r => ({ ...r, title: e.target.value }))} placeholder="e.g. New arrivals drop" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Show On</label>
+                  <select value={newReel.page} onChange={e => setNewReel(r => ({ ...r, page: e.target.value as 'home' | 'about' | 'both' }))} className={inputCls}>
+                    <option value="both">Homepage &amp; About Us</option>
+                    <option value="home">Homepage only</option>
+                    <option value="about">About Us only</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!newReel.url.trim() || reels.length >= 3) return;
+                    const updated = [...reels, { id: Date.now().toString(), url: newReel.url.trim(), title: newReel.title.trim(), page: newReel.page }];
+                    setReels(updated);
+                    saveReels(updated);
+                    setNewReel({ url: '', title: '', page: 'both' });
+                  }}
+                  disabled={reels.length >= 3}
+                  className={primaryBtn}
+                >
+                  <Plus className="w-4 h-4" /> Add Reel
+                </button>
+              </div>
+            </div>
+
+            {reelsSaveMsg && (
+              <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-semibold ${reelsSaveMsg.includes('failed') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{reelsSaveMsg}</div>
+            )}
+
+            {reels.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
+                <h3 className="text-sm font-black uppercase tracking-widest text-gray-500 mb-4">All Reels</h3>
+                <div className="space-y-3">
+                  {reels.map(reel => (
+                    <div key={reel.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                      <Video className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        {reel.title && <p className="text-sm font-bold text-gray-900 truncate">{reel.title}</p>}
+                        <p className="text-xs text-gray-400 truncate">{reel.url}</p>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                          {reel.page === 'both' ? 'Home & About' : reel.page === 'home' ? 'Homepage' : 'About Us'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const updated = reels.filter(r => r.id !== reel.id);
+                          setReels(updated);
+                          saveReels(updated);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition flex-shrink-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
+            {reels.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <Video className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-semibold">No reels added yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Deals Tab ── */}
+        {activeTab === 'deals' && (
+          <div className="p-6 sm:p-8 max-w-3xl">
+            {dealSaveMsg && (
+              <div className={`mb-5 px-4 py-3 rounded-lg text-sm font-semibold ${dealSaveMsg.includes('failed') || dealSaveMsg.includes('Select') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{dealSaveMsg}</div>
+            )}
+
+            {/* Product Search */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+              <h2 className="text-base font-black text-black mb-1">Select Products</h2>
+              <p className="text-xs text-gray-400 mb-4">Search and add products for this deal — no limit</p>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  value={dealSearch}
+                  onChange={e => { setDealSearch(e.target.value); searchDealProducts(e.target.value); }}
+                  placeholder="Search by name or brand…"
+                  className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                />
+              </div>
+              {dealSearchLoading && <p className="text-xs text-gray-400 mb-2">Searching…</p>}
+              {dealSearchResults.length > 0 && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden divide-y divide-gray-50 mb-4">
+                  {dealSearchResults.filter(p => !dealProducts.some(d => d.id === p.id)).map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => { setDealProducts(prev => [...prev, p]); setDealSearchResults([]); setDealSearch(''); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition"
+                    >
+                      {p.image && <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-gray-900 truncate">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.brand} · ₹{p.price.toLocaleString('en-IN')}</p>
+                      </div>
+                      <Plus className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {dealProducts.length > 0 ? (
+                <div className="space-y-2 mt-2">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{dealProducts.length} product{dealProducts.length > 1 ? 's' : ''} selected</p>
+                  {dealProducts.map(p => (
+                    <div key={p.id} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      {p.image && <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black text-gray-900 truncate">{p.name}</p>
+                        <p className="text-xs text-gray-500">{p.brand} · ₹{p.price.toLocaleString('en-IN')}</p>
+                      </div>
+                      <button onClick={() => setDealProducts(prev => prev.filter(d => d.id !== p.id))} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic">No products added yet</p>
+              )}
+            </div>
+
+            {/* Date & Time */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+              <h2 className="text-base font-black text-black mb-1 flex items-center gap-2"><Clock className="w-4 h-4" /> Deal Window</h2>
+              <p className="text-xs text-gray-400 mb-5">Deal auto-hides on the homepage after the end time</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Start Date &amp; Time</label>
+                  <input
+                    type="datetime-local"
+                    value={dealStartDate}
+                    onChange={e => setDealStartDate(e.target.value)}
+                    className={inputCls}
+                    placeholder="YYYY-MM-DDT09:00"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Default: 9:00 AM</p>
+                </div>
+                <div>
+                  <label className={labelCls}>End Date &amp; Time</label>
+                  <input
+                    type="datetime-local"
+                    value={dealEndDate}
+                    onChange={e => setDealEndDate(e.target.value)}
+                    className={inputCls}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Default: 9:00 PM</p>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4 justify-end">
+                {(dealProducts.length > 0 || dealStartDate) && (
+                  <button onClick={clearDeal} className={secondaryBtn}>
+                    <X className="w-4 h-4" /> Clear Deal
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (!dealStartDate) {
+                      const today = new Date();
+                      today.setHours(9, 0, 0, 0);
+                      setDealStartDate(today.toISOString().slice(0, 16));
+                    }
+                    if (!dealEndDate) {
+                      const today = new Date();
+                      today.setHours(21, 0, 0, 0);
+                      setDealEndDate(today.toISOString().slice(0, 16));
+                    }
+                    saveDeal();
+                  }}
+                  disabled={dealSaving || dealProducts.length === 0}
+                  className={primaryBtn}
+                >
+                  {dealSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Flame className="w-4 h-4" />}
+                  Save Deal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         </div>
       </main>

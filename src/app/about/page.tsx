@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Star, MapPin, Phone, Mail, Heart } from "lucide-react";
+import { useState, useEffect } from "react";
 
 const showrooms = [
   {
@@ -42,15 +43,18 @@ const values = [
   },
 ];
 
-const reels = [
-  { id: "DQ4HFBMkgY7", title: "Dwarka Ramphal Chowk walk-through" },
-  { id: "DRBifF4EpAX", title: "Sneaker wall highlight" },
-  { id: "DRL2O5_kkVp", title: "Store drop teaser" },
-];
-
 const contactPhones = Array.from(new Set(showrooms.flatMap((s) => s.phones)));
 
 export default function AboutPage() {
+  const [aboutReels, setAboutReels] = useState<{ id: string; url: string; title: string }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/reels?page=about")
+      .then((r) => r.json())
+      .then((data) => { if (data.reels) setAboutReels(data.reels); })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen bg-white text-gray-900">
 
@@ -249,23 +253,30 @@ export default function AboutPage() {
             <h2 className="text-4xl font-black text-black leading-tight">See It Before You Visit.</h2>
             <p className="text-gray-400 mt-3 text-sm">Real footage. Real shelves. No filters.</p>
           </div>
-          <div className="grid gap-5 md:grid-cols-3">
-            {reels.map((reel) => (
-              <div key={reel.id} className="overflow-hidden bg-[#0d0d0d]">
-                <div className="aspect-[9/16] w-full">
-                  <iframe
-                    src={`https://www.instagram.com/reel/${reel.id}/embed`}
-                    title={reel.title}
-                    allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-                    className="h-full w-full"
-                  />
-                </div>
-                <div className="p-4 border-t border-white/5">
-                  <p className="text-sm font-semibold text-white/60">{reel.title}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {aboutReels.length > 0 && (
+            <div className="grid gap-5 md:grid-cols-3">
+              {aboutReels.map((reel) => {
+                const embedUrl = reel.url.replace(/\/?$/, '/') + 'embed';
+                return (
+                  <div key={reel.id} className="overflow-hidden bg-[#0d0d0d]">
+                    <div className="aspect-[9/16] w-full">
+                      <iframe
+                        src={embedUrl}
+                        title={reel.title}
+                        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                        className="h-full w-full"
+                      />
+                    </div>
+                    {reel.title && (
+                      <div className="p-4 border-t border-white/5">
+                        <p className="text-sm font-semibold text-white/60">{reel.title}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 

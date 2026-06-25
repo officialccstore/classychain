@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const maxPrice = searchParams.get('maxPrice')
     const sort = searchParams.get('sort')
 
-    const where: any = {}
+    const where: any = { isVisible: true }
     
     // Filter by family through category->subfamily relation
     if (family) {
@@ -26,6 +26,15 @@ export async function GET(request: Request) {
       where.category = { ...where.category, subfamilyId }
     }
     
+    const search = searchParams.get('search')
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
     if (categoryId) where.categoryId = categoryId
     if (subcategoryId) where.subcategoryId = subcategoryId
     if (minPrice || maxPrice) {

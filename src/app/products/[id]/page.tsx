@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ShoppingCart, Heart, ChevronLeft, ChevronRight, ArrowRight, Truck, RefreshCw, Shield, ChevronDown, ChevronUp, Tag, X, Ruler } from 'lucide-react'
+import { ShoppingCart, Heart, ChevronLeft, ChevronRight, ArrowRight, ArrowLeft, Truck, RefreshCw, Shield, ChevronDown, ChevronUp, Tag, X, Ruler } from 'lucide-react'
 import { showToast } from '@/components/Toast'
 import { LogoWithText } from '@/components/Logo'
 
@@ -103,6 +103,157 @@ function AccordionSection({ title, children }: { title: string; children: React.
   )
 }
 
+function ImageLightbox({
+  images,
+  index,
+  productName,
+  onClose,
+  onNavigate,
+}: {
+  images: string[]
+  index: number
+  productName: string
+  onClose: () => void
+  onNavigate: (i: number) => void
+}) {
+  const [zoomed, setZoomed] = useState(false)
+  const [panX, setPanX] = useState(0)
+  const [panY, setPanY] = useState(0)
+
+  const lastTapRef = useRef(0)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const panStartRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  useEffect(() => {
+    setZoomed(false)
+    setPanX(0)
+    setPanY(0)
+  }, [index])
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    if (zoomed) {
+      panStartRef.current = { x: t.clientX, y: t.clientY, px: panX, py: panY }
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (zoomed && panStartRef.current && e.touches.length === 1) {
+      e.preventDefault()
+      const dx = e.touches[0].clientX - panStartRef.current.x
+      const dy = e.touches[0].clientY - panStartRef.current.y
+      setPanX(panStartRef.current.px + dx)
+      setPanY(panStartRef.current.py + dy)
+    }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length === 0) return
+    const t = e.changedTouches[0]
+    const dx = t.clientX - touchStartRef.current.x
+    const dy = t.clientY - touchStartRef.current.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const now = Date.now()
+
+    if (dist < 15) {
+      if (now - lastTapRef.current < 300) {
+        // Double tap — toggle zoom
+        if (zoomed) { setZoomed(false); setPanX(0); setPanY(0) }
+        else setZoomed(true)
+        lastTapRef.current = 0
+      } else {
+        lastTapRef.current = now
+      }
+    } else if (!zoomed && images.length > 1 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      // Swipe to navigate
+      if (dx < 0) onNavigate((index + 1) % images.length)
+      else onNavigate((index - 1 + images.length) % images.length)
+    }
+
+    touchStartRef.current = null
+    panStartRef.current = null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col" style={{ touchAction: 'none' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-4 flex-shrink-0">
+        <button
+          onClick={onClose}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        {images.length > 1 && (
+          <span className="text-white/50 text-sm">{index + 1} / {images.length}</span>
+        )}
+        <div className="w-10" />
+      </div>
+
+      {/* Image */}
+      <div
+        className="flex-1 overflow-hidden flex items-center justify-center"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <img
+          src={images[index]}
+          alt={productName}
+          draggable={false}
+          className="w-full h-full object-contain select-none"
+          style={{
+            transform: zoomed ? `translate(${panX}px, ${panY}px) scale(2.5)` : 'scale(1)',
+            transition: zoomed ? 'none' : 'transform 0.25s ease',
+            touchAction: 'none',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          } as React.CSSProperties}
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="flex-shrink-0 pb-8">
+        {zoomed ? (
+          <p className="text-center text-white/30 text-xs py-3">Drag to pan · Double-tap to zoom out</p>
+        ) : (
+          <>
+            {images.length > 1 && (
+              <div className="flex items-center justify-between px-4 mb-3">
+                <button
+                  onClick={() => onNavigate((index - 1 + images.length) % images.length)}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <div className="flex gap-1.5">
+                  {images.map((_, i) => (
+                    <div key={i} className={`h-1.5 rounded-full transition-all ${i === index ? 'w-6 bg-white' : 'w-1.5 bg-white/30'}`} />
+                  ))}
+                </div>
+                <button
+                  onClick={() => onNavigate((index + 1) % images.length)}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+            <p className="text-center text-white/30 text-xs">Double-tap to zoom in</p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ProductDetailPage() {
   const params = useParams()
   const [product, setProduct] = useState<Product | null>(null)
@@ -117,6 +268,12 @@ export default function ProductDetailPage() {
   const [adding, setAdding] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const galleryTouchStart = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [params.id])
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -232,6 +389,15 @@ export default function ProductDetailPage() {
   return (
     <div className="min-h-screen bg-white">
       {sizeChartOpen && <SizeChartModal onClose={() => setSizeChartOpen(false)} />}
+      {lightboxOpen && allImages.length > 0 && (
+        <ImageLightbox
+          images={allImages}
+          index={currentImageIndex}
+          productName={product.name}
+          onClose={() => setLightboxOpen(false)}
+          onNavigate={setCurrentImageIndex}
+        />
+      )}
       {/* Breadcrumb */}
       <div className="border-b border-gray-100 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-2 text-xs text-gray-400">
@@ -248,7 +414,7 @@ export default function ProductDetailPage() {
           {/* Image Gallery */}
           <div>
             <div
-              className="relative bg-gray-50 rounded-2xl overflow-hidden aspect-square group cursor-zoom-in"
+              className={`relative bg-gray-50 rounded-2xl overflow-hidden aspect-square group ${zoomPos ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
               onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect()
                 setZoomPos({
@@ -257,6 +423,17 @@ export default function ProductDetailPage() {
                 })
               }}
               onMouseLeave={() => setZoomPos(null)}
+              onTouchStart={(e) => {
+                galleryTouchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+              }}
+              onTouchEnd={(e) => {
+                if (!galleryTouchStart.current || e.changedTouches.length === 0) return
+                const dx = e.changedTouches[0].clientX - galleryTouchStart.current.x
+                const dy = e.changedTouches[0].clientY - galleryTouchStart.current.y
+                const dist = Math.sqrt(dx * dx + dy * dy)
+                if (dist < 15) setLightboxOpen(true)
+                galleryTouchStart.current = null
+              }}
             >
               {allImages.length > 0 ? (
                 <>
@@ -271,10 +448,10 @@ export default function ProductDetailPage() {
                   />
                   {!zoomPos && allImages.length > 1 && (
                     <>
-                      <button onClick={() => setCurrentImageIndex(i => (i - 1 + allImages.length) % allImages.length)} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50">
+                      <button onClick={() => setCurrentImageIndex(i => (i - 1 + allImages.length) % allImages.length)} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center transition hover:bg-gray-50">
                         <ChevronLeft className="w-5 h-5" />
                       </button>
-                      <button onClick={() => setCurrentImageIndex(i => (i + 1) % allImages.length)} className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-gray-50">
+                      <button onClick={() => setCurrentImageIndex(i => (i + 1) % allImages.length)} className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center transition hover:bg-gray-50">
                         <ChevronRight className="w-5 h-5" />
                       </button>
                       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
@@ -343,8 +520,6 @@ export default function ProductDetailPage() {
               {totalStock > 0 ? '✓ In Stock' : '✗ Out of Stock'}
             </p>
 
-            <p className="text-gray-600 text-sm leading-relaxed mb-6">{product.description}</p>
-
             {/* Color Selection */}
             {product.colors && product.colors.length > 0 && (
               <div className="mb-6">
@@ -370,7 +545,7 @@ export default function ProductDetailPage() {
             {product.sizeVariants && product.sizeVariants.length > 0 && (
               <div className="mb-7">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-black uppercase tracking-wider text-gray-700">Select Size</h4>
+                  <h4 className="text-sm font-black uppercase tracking-wider text-gray-700">Select Size <span className="text-gray-400 font-semibold normal-case">(UK)</span></h4>
                   <button
                     onClick={() => setSizeChartOpen(true)}
                     className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black underline underline-offset-2 transition"
@@ -458,9 +633,10 @@ export default function ProductDetailPage() {
                   <p className="whitespace-pre-line">{product.specifications}</p>
                 </AccordionSection>
               )}
-              <AccordionSection title="Product Description">
-                <p>{product.description}</p>
-              </AccordionSection>
+              <div className="border-t border-gray-100">
+                <p className="py-4 text-sm font-bold text-gray-800">Product Description</p>
+                <p className="pb-4 text-sm text-gray-600 leading-relaxed">{product.description}</p>
+              </div>
             </div>
           </div>
         </div>

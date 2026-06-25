@@ -12,9 +12,9 @@ datasource db {
 
 model User {
   id        String     @id @default(auto()) @map("_id") @db.ObjectId
-  email     String     @unique
+  email     String?    @unique
   password  String?
-  name      String
+  name      String     @default("User")
   role      String     @default("user")
   phone     String?
   address   String?
@@ -28,6 +28,8 @@ model User {
   reviews   Review[]
   cartItems CartItem[]
   addresses Address[]
+
+  @@index([phone])
 }
 
 model Subfamily {
@@ -82,6 +84,7 @@ model Product {
   subcategory     Subcategory?  @relation(fields: [subcategoryId], references: [id])
   brand           String
   rating          Float         @default(0)
+  isVisible       Boolean       @default(true)
   tags            String[]      @default([])
   colors          String[]      @default([])
   material        String?
@@ -206,4 +209,15 @@ model Coupon {
   usageCount  Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model OtpVerification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
 }

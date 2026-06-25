@@ -91,6 +91,33 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    if (!isAdminFromReq(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+
+    const product = await prisma.product.update({
+      where: { id },
+      data: { isVisible: body.isVisible },
+    })
+
+    return NextResponse.json({ id: product.id, isVisible: product.isVisible })
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    }
+    console.error('Failed to update product visibility:', error)
+    return NextResponse.json({ error: 'Failed to update visibility' }, { status: 500 })
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -101,6 +128,10 @@ export async function DELETE(
     }
 
     const { id } = await params
+
+    await prisma.cartItem.deleteMany({ where: { productId: id } })
+    await prisma.orderItem.deleteMany({ where: { productId: id } })
+    await prisma.review.deleteMany({ where: { productId: id } })
 
     await prisma.product.delete({
       where: { id },
