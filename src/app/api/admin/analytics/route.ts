@@ -23,25 +23,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch all orders with items info
-    // Note: user is fetched separately (not via `include`) because the user
-    // relation is required in the schema, but Mongo doesn't enforce FK
-    // integrity — orders can reference a userId whose User document was
-    // deleted, which would make a required `include` throw instead of
-    // returning null.
+    // Fetch all orders with items and user info
     const allOrders = await prisma.order.findMany({
       include: {
         items: { include: { product: true } },
+        user: { select: { name: true } },
       },
       orderBy: { createdAt: 'asc' },
     })
-
-    const userIds = Array.from(new Set(allOrders.map((o: { userId: string }) => o.userId)))
-    const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, name: true },
-    })
-    const userNameById = new Map(users.map((u: { id: string; name: string }) => [u.id, u.name]))
 
     const totalUsers = await prisma.user.count({ where: { role: 'user' } })
     const totalProducts = await prisma.product.count()
@@ -134,7 +123,7 @@ export async function GET(request: Request) {
         status: o.status,
         itemCount: o.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0),
         createdAt: o.createdAt,
-        customerName: userNameById.get(o.userId) || 'Guest',
+        customerName: o.user?.name || 'Guest',
       }))
 
     return NextResponse.json({
