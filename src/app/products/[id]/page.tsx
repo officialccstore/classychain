@@ -263,6 +263,8 @@ export default function ProductDetailPage() {
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [selectedColor, setSelectedColor] = useState<string | null>(null)
   const [sizeChartOpen, setSizeChartOpen] = useState(false)
+  const [sizeError, setSizeError] = useState(false)
+  const [shakeKey, setShakeKey] = useState(0)
   const [zoomPos, setZoomPos] = useState<{ x: number; y: number } | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -281,14 +283,6 @@ export default function ProductDetailPage() {
         const response = await fetch(`/api/products/${params.id}`)
         const data = await response.json()
         setProduct(data)
-        if (data?.sizeVariants?.length > 0) {
-          const first = data.sizeVariants.find((v: SizeVariant) => v.quantity > 0) || data.sizeVariants[0]
-          setSelectedVariantId(first?.id || null)
-          if (first) {
-            const sizes = first.size.includes(',') ? first.size.split(',').map((s: string) => s.trim()) : [first.size]
-            setSelectedSize(sizes[0])
-          }
-        }
         if (data?.colors?.length > 0) {
           setSelectedColor(data.colors[0])
         }
@@ -314,6 +308,8 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = async () => {
     if (!selectedSize) {
+      setSizeError(true)
+      setShakeKey((k) => k + 1)
       showToast('Please select a size first', 'error', 3000)
       return
     }
@@ -543,9 +539,11 @@ export default function ProductDetailPage() {
 
             {/* Size Selection */}
             {product.sizeVariants && product.sizeVariants.length > 0 && (
-              <div className="mb-7">
+              <div key={shakeKey} className={`mb-7 ${sizeError ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-black uppercase tracking-wider text-gray-700">Select Size <span className="text-gray-400 font-semibold normal-case">(UK)</span></h4>
+                  <h4 className={`text-sm font-black uppercase tracking-wider ${sizeError ? 'text-red-500' : 'text-gray-700'}`}>
+                    Select Size <span className="text-gray-400 font-semibold normal-case">(UK)</span>
+                  </h4>
                   <button
                     onClick={() => setSizeChartOpen(true)}
                     className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black underline underline-offset-2 transition"
@@ -562,12 +560,13 @@ export default function ProductDetailPage() {
                       return (
                         <button
                           key={`${v.id}-${sizeIdx}`}
-                          onClick={() => { setSelectedVariantId(v.id); setSelectedSize(size) }}
+                          onClick={() => { setSelectedVariantId(v.id); setSelectedSize(size); setSizeError(false) }}
                           disabled={isOOS}
-                          className={`relative min-w-[52px] px-4 py-2.5 border-2 rounded-lg text-sm font-bold transition-all
-                            ${isSelected ? 'border-black bg-black text-white' :
+                          className={`relative min-w-[52px] px-4 py-2.5 border-2 rounded-lg text-sm font-bold transition-all duration-200
+                            ${isSelected ? 'border-black bg-black text-white scale-105 shadow-md' :
                               isOOS ? 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed' :
-                              'border-gray-200 bg-white text-gray-800 hover:border-gray-400'}`}
+                              sizeError ? 'border-red-300 bg-red-50 text-gray-800 hover:border-red-400' :
+                              'border-gray-200 bg-white text-gray-800 hover:border-black hover:-translate-y-0.5'}`}
                         >
                           {isOOS && <span className="absolute inset-0 flex items-center justify-center"><span className="w-full h-0.5 bg-gray-300 rotate-45 absolute" /></span>}
                           <span className="relative">{size}</span>
@@ -576,6 +575,9 @@ export default function ProductDetailPage() {
                     })
                   })}
                 </div>
+                {sizeError && (
+                  <p className="text-xs font-bold text-red-500 mt-2">Please select a size to continue</p>
+                )}
               </div>
             )}
 

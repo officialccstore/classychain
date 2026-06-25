@@ -403,31 +403,25 @@ export default function Home() {
                 </Link>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {categories.slice(0, 4).map((cat, idx) => {
-                  const bgs = ["bg-[#0d0d0d]", "bg-[#1a1410]", "bg-[#0f1217]", "bg-[#161411]"];
-                  return (
-                    <Link key={cat.id} href={`/products?categoryId=${cat.id}`} className="group">
-                      <div
-                        className={`${bgs[idx % 4]} h-56 sm:h-72 relative overflow-hidden flex flex-col justify-between p-6`}
-                      >
-                        <div className="font-black text-5xl leading-none select-none" style={{ color: "rgba(255,255,255,0.06)" }}>
-                          0{idx + 1}
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center opacity-[0.04] group-hover:opacity-[0.08] transition-opacity">
-                          <div className="w-36 h-36 rounded-full border-2 border-white" />
-                        </div>
-                        <div>
-                          <p className="text-white/30 text-[10px] uppercase tracking-[0.3em] mb-2">Explore</p>
-                          <h3 className="text-white font-black text-xl leading-tight">{cat.name}</h3>
-                          <span className="inline-flex items-center gap-1.5 text-amber-400 text-[10px] font-bold uppercase tracking-widest mt-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                            Shop now <ArrowRight className="w-3 h-3" />
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
+              <div className="border-t border-black/10 divide-y divide-black/10">
+                {categories.slice(0, 4).map((cat, idx) => (
+                  <Link
+                    key={cat.id}
+                    href={`/products?categoryId=${cat.id}`}
+                    className="group relative flex items-center justify-between py-6 sm:py-9 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-hidden transition-colors duration-300 hover:bg-[#faf7f0]"
+                  >
+                    <span className="absolute left-0 top-0 h-full w-[3px] bg-amber-400 origin-top scale-y-0 group-hover:scale-y-100 transition-transform duration-300" />
+                    <div className="flex items-baseline gap-4 sm:gap-8">
+                      <span className="text-black/30 group-hover:text-amber-500 text-xs sm:text-sm font-bold tracking-widest transition-colors duration-300">
+                        0{idx + 1}
+                      </span>
+                      <h3 className="text-3xl sm:text-6xl font-black text-black uppercase tracking-tight leading-none group-hover:text-amber-500 group-hover:translate-x-1.5 transition-all duration-300">
+                        {cat.name}
+                      </h3>
+                    </div>
+                    <ArrowRight className="w-5 h-5 sm:w-8 sm:h-8 text-black/15 group-hover:text-amber-500 group-hover:translate-x-2 transition-all duration-300 flex-shrink-0" />
+                  </Link>
+                ))}
               </div>
             </div>
           </section>
