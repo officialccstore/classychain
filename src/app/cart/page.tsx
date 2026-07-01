@@ -8,17 +8,20 @@ import { showToast } from '@/components/Toast'
 
 interface CartItem {
   id: string
-  productId: string
+  productId?: string | null
+  dealProductId?: string | null
   product: {
     id: string
     name: string
     price: number
     brand: string
     image?: string
+    sizeVariants?: Array<{ size: string; quantity: number }>
   }
-  sizeVariant?: { id: string; size: string } | null
+  sizeVariant?: { id: string; size: string; quantity?: number } | null
   size?: string
   quantity: number
+  isDeal?: boolean
 }
 
 function PhoneModal({ onClose, onSaved }: { onClose: () => void; onSaved: (phone: string) => void }) {
@@ -131,12 +134,59 @@ export default function CartPage() {
   const getItemKey = (item: { productId: string; sizeVariantId?: string | null }) =>
     `${item.productId}-${item.sizeVariantId || 'na'}`
 
+  const loadDealItems = (): CartItem[] => {
+    try {
+      const raw = localStorage.getItem('dealCart')
+      if (!raw) return []
+      const items = JSON.parse(raw) as Array<{ dealProductId: string; name: string; image: string; category: string; price?: number; size: string; quantity: number }>
+      return items.map(it => ({
+        id: `deal-${it.dealProductId}-${it.size}`,
+        productId: it.dealProductId,
+        dealProductId: it.dealProductId,
+        isDeal: true,
+        product: { id: it.dealProductId, name: it.name, price: it.price || 0, brand: it.category, image: it.image },
+        size: it.size,
+        quantity: it.quantity,
+      }))
+    } catch { return [] }
+  }
+
+  // For guests: show localStorage deal items immediately without waiting for the (soon-to-fail) API call
+  useEffect(() => {
+    if (!localStorage.getItem('token')) {
+      const items = loadDealItems()
+      if (items.length > 0) {
+        setCartItems(items)
+        setLoading(false)
+      }
+    }
+  }, [])
+
+  // Re-merge localStorage deal items when cartUpdated fires — guests only.
+  // Logged-in users have deal items in the DB; re-reading localStorage would wipe them.
+  useEffect(() => {
+    const refreshDeals = () => {
+      if (localStorage.getItem('token')) return
+      setCartItems(prev => {
+        const nonDeal = prev.filter(it => !it.isDeal)
+        return [...nonDeal, ...loadDealItems()]
+      })
+    }
+    window.addEventListener('cartUpdated', refreshDeals)
+    window.addEventListener('storage', refreshDeals)
+    return () => {
+      window.removeEventListener('cartUpdated', refreshDeals)
+      window.removeEventListener('storage', refreshDeals)
+    }
+  }, [])
+
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem('token'))
     const fetchCart = async () => {
       try {
         const token = localStorage.getItem('token')
         const response = await fetch('/api/cart', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        let regularItems: CartItem[] = []
         if (!response.ok) {
           if (response.status === 401) {
             const pendingRaw = localStorage.getItem('pendingCart')
@@ -144,7 +194,7 @@ export default function CartPage() {
               const pending = JSON.parse(pendingRaw) as Array<{ productId: string; quantity: number; sizeVariantId?: string | null; size?: string }>
               if (pending.length > 0) {
                 const prods = await Promise.all(pending.map(it => fetch(`/api/products/${it.productId}`).then(r => r.ok ? r.json() : null)))
-                const merged = pending.map((item, i) => {
+                regularItems = pending.map((item, i) => {
                   const p = prods[i]
                   if (!p) return null
                   return {
@@ -156,16 +206,31 @@ export default function CartPage() {
                     quantity: item.quantity,
                   } as CartItem
                 }).filter(Boolean) as CartItem[]
-                setCartItems(merged)
               }
             }
           }
         } else {
           const data = await response.json()
-          setCartItems(Array.isArray(data) ? data : [])
+          // Normalize deal items: synthesize a `product` field from `dealProduct`
+          regularItems = (Array.isArray(data) ? data : []).map((item: any) => {
+            if (item.dealProductId && item.dealProduct) {
+              const dp = item.dealProduct
+              const svs = (dp.sizeVariants || []) as Array<{ size: string; quantity: number }>
+              return {
+                ...item,
+                isDeal: true,
+                product: { id: dp.id, name: dp.name, price: dp.price, brand: dp.category, image: dp.image, sizeVariants: svs },
+              }
+            }
+            return item
+          })
         }
+        // Logged-in: deal items are in DB — don't append localStorage.
+        // Guests: append localStorage deal items (API returned 401).
+        const loggedIn = !!localStorage.getItem('token')
+        setCartItems(loggedIn ? regularItems : [...regularItems, ...loadDealItems()])
       } catch {
-        setCartItems([])
+        setCartItems(loadDealItems())
       } finally {
         setLoading(false)
       }
@@ -173,12 +238,39 @@ export default function CartPage() {
     fetchCart()
   }, [])
 
+  const getMaxQty = (item: CartItem): number => {
+    if (item.isDeal) {
+      const svs = item.product?.sizeVariants || []
+      const sv = svs.find(s => s.size === item.size)
+      return sv?.quantity ?? 99
+    }
+    return item.sizeVariant?.quantity ?? 99
+  }
+
+  const removeDealItem = (itemId: string) => {
+    const dealCart = JSON.parse(localStorage.getItem('dealCart') || '[]') as any[]
+    const updated = dealCart.filter((it: any) => `deal-${it.dealProductId}-${it.size}` !== itemId)
+    localStorage.setItem('dealCart', JSON.stringify(updated))
+  }
+
+  const updateDealItem = (itemId: string, quantity: number) => {
+    const dealCart = JSON.parse(localStorage.getItem('dealCart') || '[]') as any[]
+    const updated = dealCart.map((it: any) =>
+      `deal-${it.dealProductId}-${it.size}` === itemId ? { ...it, quantity } : it
+    )
+    localStorage.setItem('dealCart', JSON.stringify(updated))
+  }
+
   const removeItem = async (itemId: string) => {
+    const item = cartItems.find(it => it.id === itemId)
     try {
       setRemovingId(itemId)
       if (isLoggedIn) {
+        // All items (deal + regular) are in DB for logged-in users
         const token = localStorage.getItem('token')
         await fetch(`/api/cart/${itemId}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      } else if (item?.isDeal) {
+        removeDealItem(itemId)
       } else {
         const pending = JSON.parse(localStorage.getItem('pendingCart') || '[]')
         localStorage.setItem('pendingCart', JSON.stringify(pending.filter((it: any) => getItemKey(it) !== itemId)))
@@ -194,25 +286,53 @@ export default function CartPage() {
 
   const updateQuantity = async (itemId: string, quantity: number) => {
     if (quantity <= 0) { removeItem(itemId); return }
+    const item = cartItems.find(it => it.id === itemId)
     try {
       setUpdatingId(itemId)
       if (isLoggedIn) {
+        // All items (deal + regular) are in DB for logged-in users
+        const max = item ? getMaxQty(item) : 99
+        if (quantity > max) {
+          showToast(`Only ${max} unit${max === 1 ? '' : 's'} available in this size`, 'error', 2000)
+          return
+        }
         const token = localStorage.getItem('token')
         const res = await fetch(`/api/cart/${itemId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ quantity }),
         })
+        const resData = await res.json()
         if (res.ok) {
-          const updated = await res.json()
-          setCartItems(prev => prev.map(it => it.id === itemId ? updated : it))
+          // Normalize deal item response
+          const normalized = resData.dealProductId && resData.dealProduct ? {
+            ...resData,
+            isDeal: true,
+            product: {
+              id: resData.dealProduct.id,
+              name: resData.dealProduct.name,
+              price: resData.dealProduct.price,
+              brand: resData.dealProduct.category,
+              image: resData.dealProduct.image,
+              sizeVariants: resData.dealProduct.sizeVariants || [],
+            },
+          } : resData
+          setCartItems(prev => prev.map(it => it.id === itemId ? normalized : it))
+        } else {
+          showToast(resData.error || 'Failed to update', 'error', 2000)
         }
+      } else if (item?.isDeal) {
+        const max = getMaxQty(item)
+        const capped = Math.min(quantity, max)
+        updateDealItem(itemId, capped)
+        setCartItems(prev => prev.map(it => it.id === itemId ? { ...it, quantity: capped } : it))
       } else {
         const pending = JSON.parse(localStorage.getItem('pendingCart') || '[]')
         localStorage.setItem('pendingCart', JSON.stringify(pending.map((it: any) => getItemKey(it) === itemId ? { ...it, quantity } : it)))
         setCartItems(prev => prev.map(it => it.id === itemId ? { ...it, quantity } : it))
+        // Only sync header count for guest path (logged-in path header syncs on its own interval)
+        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
       }
-      try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
     } catch {
       // ignore
     } finally {
@@ -294,7 +414,7 @@ export default function CartPage() {
             {cartItems.map((item) => (
               <div key={item.id} className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 flex gap-4 hover:shadow-sm transition-shadow">
                 {/* Image */}
-                <Link href={`/products/${item.productId}`} className="flex-shrink-0">
+                <Link href={item.isDeal ? `/deals/${item.dealProductId}` : `/products/${item.productId}`} className="flex-shrink-0">
                   <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-100 rounded-lg overflow-hidden">
                     {item.product.image ? (
                       <img src={item.product.image} alt={item.product.name} className="w-full h-full object-cover" />
@@ -308,10 +428,17 @@ export default function CartPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-0.5">{item.product.brand}</p>
-                      <Link href={`/products/${item.productId}`}>
+                      {item.isDeal ? (
+                        <span className="inline-block text-[9px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mb-1">
+                          Deal of the Day
+                        </span>
+                      ) : (
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-0.5">{item.product.brand}</p>
+                      )}
+                      <Link href={item.isDeal ? `/deals/${item.dealProductId}` : `/products/${item.productId}`}>
                         <h3 className="font-bold text-gray-900 text-sm sm:text-base line-clamp-2 hover:text-black">{item.product.name}</h3>
                       </Link>
+                      {item.isDeal && <p className="text-xs text-gray-400 mt-0.5">{item.product.brand}</p>}
                       {item.size && (
                         <p className="text-xs text-gray-500 mt-1">UK Size: <span className="font-semibold">{item.size}</span></p>
                       )}
@@ -341,14 +468,26 @@ export default function CartPage() {
                       </button>
                       <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        disabled={updatingId === item.id}
+                        onClick={() => {
+                          const max = getMaxQty(item)
+                          if (item.quantity >= max) {
+                            showToast(`Only ${max} unit${max === 1 ? '' : 's'} available in this size`, 'error', 2000)
+                            return
+                          }
+                          updateQuantity(item.id, item.quantity + 1)
+                        }}
+                        disabled={updatingId === item.id || item.quantity >= getMaxQty(item)}
                         className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 text-gray-600 transition disabled:opacity-40"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className="font-black text-base text-black">₹{(item.product.price * item.quantity).toLocaleString('en-IN')}</p>
+                    <p className="font-black text-base text-black">
+                      {item.product.price > 0
+                        ? `₹${(item.product.price * item.quantity).toLocaleString('en-IN')}`
+                        : <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">Deal Item</span>
+                      }
+                    </p>
                   </div>
                 </div>
               </div>

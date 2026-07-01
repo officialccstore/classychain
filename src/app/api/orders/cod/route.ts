@@ -30,7 +30,9 @@ export async function POST(request: Request) {
         status: 'accepted',
         items: {
           create: items.map((item: any) => ({
-            productId: item.productId,
+            productId: item.productId || null,
+            dealProductId: item.isDeal ? (item.dealProductId || item.productId) : null,
+            itemName: item.isDeal ? (item.product?.name || null) : null,
             quantity: item.quantity,
             price: item.product?.price || 0,
             size: item.size || null,
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
         customerEmail: user?.email,
         shippingAddress,
         items: order.items.map((i: any) => ({
-          name: i.product.name,
+          name: i.product?.name || i.itemName || 'Deal Product',
           quantity: i.quantity,
           price: i.price,
         })),

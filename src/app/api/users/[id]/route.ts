@@ -41,9 +41,13 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
+    const { name, email } = body
     const user = await prisma.user.update({
       where: { id },
-      data: body,
+      data: {
+        ...(name !== undefined && { name }),
+        ...(email !== undefined && { email: email || null }),
+      },
       select: {
         id: true,
         email: true,

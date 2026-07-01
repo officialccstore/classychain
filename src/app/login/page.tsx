@@ -9,7 +9,7 @@ import { LogoWithText } from '@/components/Logo'
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google'
 import { Phone, ArrowLeft, RefreshCw } from 'lucide-react'
 
-type Step = 'phone' | 'otp'
+type Step = 'phone' | 'otp' | 'profile'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -20,6 +20,9 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
+  const [setupToken, setSetupToken] = useState('')
+  const [profileName, setProfileName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
 
   const handleLoginSuccess = async (token: string, user: any) => {
     localStorage.setItem('token', token)
@@ -35,10 +38,29 @@ export default function LoginPage() {
           body: JSON.stringify({ items: cartItems }),
         })
         localStorage.removeItem('pendingCart')
-        try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
         showToast('Cart items transferred to your account!', 'success', 3000)
       } catch {}
     }
+
+    // Migrate guest deal cart items into DB
+    const rawDealCart = localStorage.getItem('dealCart')
+    if (rawDealCart) {
+      try {
+        const dealItems = JSON.parse(rawDealCart) as Array<{ dealProductId: string; size: string; quantity: number }>
+        await Promise.all(
+          dealItems.map(it =>
+            fetch('/api/cart', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ dealProductId: it.dealProductId, size: it.size, quantity: it.quantity }),
+            })
+          )
+        )
+        localStorage.removeItem('dealCart')
+      } catch {}
+    }
+
+    try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
 
     const urlParams = new URL(window.location.href).searchParams
     const redirect = urlParams.get('redirect') || urlParams.get('next') || (user.role === 'admin' ? '/admin' : '/products')
@@ -92,6 +114,11 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Invalid OTP'); return }
+      if (data.isNewUser) {
+        setSetupToken(data.setupToken)
+        setStep('profile')
+        return
+      }
       showToast('Logged in successfully!', 'success', 2000)
       await handleLoginSuccess(data.token, data.user)
     } catch {
@@ -118,6 +145,27 @@ export default function LoginPage() {
       showToast('New OTP sent!', 'success', 2000)
     } catch {
       setError('Failed to resend OTP.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCompleteProfile = async () => {
+    if (!profileName.trim()) { setError('Please enter your name'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/auth/otp/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setupToken, name: profileName, email: profileEmail }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Failed to create account'); return }
+      showToast('Account created! Welcome to ClassyChain.', 'success', 3000)
+      await handleLoginSuccess(data.token, data.user)
+    } catch {
+      setError('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -164,27 +212,74 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Google Sign-In */}
-        <div className={`mb-5 ${googleLoading ? 'opacity-60 pointer-events-none' : ''}`}>
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={() => setError('Google login failed. Please try again.')}
-            width="100%"
-            shape="rectangular"
-            theme="outline"
-            text="continue_with"
-            logo_alignment="left"
-          />
-        </div>
+        {/* Google Sign-In — hidden on profile setup step */}
+        {step !== 'profile' && (
+          <>
+            <div className={`mb-5 ${googleLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google login failed. Please try again.')}
+                width="100%"
+                shape="rectangular"
+                theme="outline"
+                text="continue_with"
+                logo_alignment="left"
+              />
+            </div>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">or</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">or</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+          </>
+        )}
 
-        {/* Phone OTP */}
-        {step === 'phone' ? (
+        {/* Profile Setup (new users only) */}
+        {step === 'profile' ? (
+          <div className="space-y-4">
+            <div className="text-center mb-2">
+              <p className="text-sm font-semibold text-gray-700">One last step — tell us about yourself</p>
+              <p className="text-xs text-gray-400 mt-0.5">Verified: +91 {phone}</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={profileName}
+                onChange={e => { setProfileName(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleCompleteProfile()}
+                placeholder="Your full name"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Email <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="email"
+                value={profileEmail}
+                onChange={e => { setProfileEmail(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleCompleteProfile()}
+                placeholder="you@email.com"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+              />
+            </div>
+            <button
+              onClick={handleCompleteProfile}
+              disabled={loading || !profileName.trim()}
+              className="w-full bg-black text-white py-2.5 rounded-lg font-bold text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+            >
+              {loading ? (
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+              ) : 'Create Account'}
+            </button>
+          </div>
+        ) : /* Phone OTP */ step === 'phone' ? (
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -263,14 +358,16 @@ export default function LoginPage() {
           </div>
         )}
 
-        <div className="mt-5 pt-5 border-t border-gray-100">
-          <button
-            onClick={handleContinueAsGuest}
-            className="w-full border border-gray-200 text-gray-600 py-2.5 rounded-lg font-semibold text-sm hover:border-gray-400 hover:text-black transition"
-          >
-            Continue as Guest
-          </button>
-        </div>
+        {step !== 'profile' && (
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <button
+              onClick={handleContinueAsGuest}
+              className="w-full border border-gray-200 text-gray-600 py-2.5 rounded-lg font-semibold text-sm hover:border-gray-400 hover:text-black transition"
+            >
+              Continue as Guest
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

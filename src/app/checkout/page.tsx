@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle, LogIn, ShoppingBag, Tag, X, Truck, MapPin, Plus } from 'lucide-react'
+import { CheckCircle, LogIn, ShoppingBag, Tag, X, MapPin, Plus } from 'lucide-react'
 
 interface Address {
   id: string
@@ -23,6 +23,7 @@ interface CartItem {
   quantity: number
   size?: string
   color?: string
+  isDeal?: boolean
   product?: {
     id: string
     name: string
@@ -54,7 +55,7 @@ function CheckoutContent() {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
 
-  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay')
+  const [paymentMethod] = useState<'razorpay'>('razorpay')
 
   const [couponCode, setCouponCode] = useState('')
   const [couponLoading, setCouponLoading] = useState(false)
@@ -62,8 +63,76 @@ function CheckoutContent() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; percentage: number } | null>(null)
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [pinLookupLoading, setPinLookupLoading] = useState(false)
+
+  const fetchPinData = async (pin: string) => {
+    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) return
+    setPinLookupLoading(true)
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`)
+      const data = await res.json()
+      if (data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0]
+        setShippingCity(po.District || po.Division || '')
+        setShippingState(po.State || '')
+        setShippingCountry(po.Country || 'India')
+        setFieldErrors(p => ({ ...p, city: '', state: '', zip: '', country: '' }))
+      }
+    } catch {} finally {
+      setPinLookupLoading(false)
+    }
+  }
+
+  // Load deal items immediately so loading=true doesn't hide them before the API call finishes
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('dealCart')
+      const dealCart = raw ? JSON.parse(raw) : []
+      if (dealCart.length > 0) {
+        const items: CartItem[] = dealCart.map((it: any) => ({
+          id: `deal-${it.dealProductId}-${it.size}`,
+          productId: it.dealProductId,
+          quantity: it.quantity,
+          size: it.size,
+          isDeal: true,
+          product: {
+            id: it.dealProductId,
+            name: it.name,
+            price: it.price || 0,
+            brand: it.category || 'Deal',
+            image: it.image,
+          },
+        }))
+        setCartItems(items)
+        setLoading(false)
+      }
+    } catch {}
+  }, [])
 
   useEffect(() => {
+    const loadDealItems = (): CartItem[] => {
+      try {
+        const raw = localStorage.getItem('dealCart')
+        const dealCart = raw ? JSON.parse(raw) : []
+        return dealCart.map((it: any) => ({
+          id: `deal-${it.dealProductId}-${it.size}`,
+          productId: it.dealProductId,
+          quantity: it.quantity,
+          size: it.size,
+          isDeal: true,
+          product: {
+            id: it.dealProductId,
+            name: it.name,
+            price: it.price || 0,
+            brand: it.category || 'Deal',
+            image: it.image,
+          },
+        }))
+      } catch {
+        return []
+      }
+    }
+
     const fetchCart = async () => {
       try {
         const token = localStorage.getItem('token')
@@ -71,10 +140,30 @@ function CheckoutContent() {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         })
         const data = await response.json()
-        const normalized = Array.isArray(data) ? data : (data?.items || [])
-        setCartItems(normalized)
+        const rawItems = Array.isArray(data) ? data : (data?.items || [])
+
+        // Normalize deal items: synthesize `product` from `dealProduct`
+        const normalized: CartItem[] = rawItems.map((item: any) => {
+          if (item.dealProductId && item.dealProduct) {
+            const dp = item.dealProduct
+            return {
+              ...item,
+              isDeal: true,
+              product: { id: dp.id, name: dp.name, price: dp.price, brand: dp.category, image: dp.image },
+            }
+          }
+          return item
+        })
+
+        // Guests: API returns 401 → normalized is empty → fall back to localStorage deal items
+        if (!token) {
+          setCartItems([...normalized, ...loadDealItems()])
+        } else {
+          setCartItems(normalized)
+        }
       } catch (error) {
         console.error('Failed to fetch cart:', error)
+        setCartItems(loadDealItems())
       } finally {
         setLoading(false)
       }
@@ -234,24 +323,6 @@ function CheckoutContent() {
       setUser(updatedUser)
       try { localStorage.setItem('user', JSON.stringify(updatedUser)) } catch {}
 
-      if (paymentMethod === 'cod') {
-        // Cash on Delivery
-        const codRes = await fetch('/api/orders/cod', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ items: cartItems, total, shippingAddress }),
-        })
-        const codData = await codRes.json()
-        if (codRes.ok && codData.success) {
-          try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
-          router.push('/checkout?success=true')
-        } else {
-          alert(codData.error || 'Failed to place order. Please try again.')
-          setPlacing(false)
-        }
-        return
-      }
-
       // Razorpay payment
       const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
@@ -288,6 +359,7 @@ function CheckoutContent() {
           })
           const verifyData = await verifyRes.json()
           if (verifyRes.ok && verifyData.success) {
+            try { localStorage.removeItem('dealCart') } catch {}
             try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
             router.push('/checkout?success=true')
           } else {
@@ -360,7 +432,11 @@ function CheckoutContent() {
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900 line-clamp-2">{item.product?.name}</p>
                     <div className="flex flex-wrap gap-2 mt-0.5">
-                      <p className="text-xs text-gray-400">{item.product?.brand}</p>
+                      {item.isDeal ? (
+                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Deal of the Day</span>
+                      ) : (
+                        <p className="text-xs text-gray-400">{item.product?.brand}</p>
+                      )}
                       {item.size && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">UK Size: {item.size}</span>}
                       {item.color && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-medium">Colour: {item.color}</span>}
                       <span className="text-xs text-gray-400">Qty: {item.quantity}</span>
@@ -463,6 +539,28 @@ function CheckoutContent() {
                   placeholder="Address line 2 (optional)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-black transition sm:col-span-2"
                 />
+                <div className="sm:col-span-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={shippingZip}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, '')
+                        setShippingZip(v)
+                        setFieldErrors(p => ({ ...p, zip: '' }))
+                        fetchPinData(v)
+                      }}
+                      placeholder="PIN Code *"
+                      className={inputCls('zip')}
+                    />
+                    {pinLookupLoading && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-300 border-t-black rounded-full animate-spin" />
+                    )}
+                  </div>
+                  {fieldErrors.zip && <p className="text-xs text-red-500 mt-1">{fieldErrors.zip}</p>}
+                </div>
                 <div>
                   <input
                     type="text"
@@ -483,17 +581,7 @@ function CheckoutContent() {
                   />
                   {fieldErrors.state && <p className="text-xs text-red-500 mt-1">{fieldErrors.state}</p>}
                 </div>
-                <div>
-                  <input
-                    type="text"
-                    value={shippingZip}
-                    onChange={(e) => { setShippingZip(e.target.value); setFieldErrors(p => ({ ...p, zip: '' })) }}
-                    placeholder="PIN Code *"
-                    className={inputCls('zip')}
-                  />
-                  {fieldErrors.zip && <p className="text-xs text-red-500 mt-1">{fieldErrors.zip}</p>}
-                </div>
-                <div>
+                <div className="sm:col-span-2">
                   <input
                     type="text"
                     value={shippingCountry}
@@ -508,23 +596,12 @@ function CheckoutContent() {
               {/* Payment Method */}
               <h3 className="font-black text-black uppercase tracking-wide text-sm mb-3">Payment Method</h3>
               <div className="space-y-2 mb-5">
-                <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${paymentMethod === 'razorpay' ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="payment" value="razorpay" checked={paymentMethod === 'razorpay'} onChange={() => setPaymentMethod('razorpay')} className="accent-black" />
+                <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-black bg-gray-50">
                   <div>
                     <p className="font-bold text-sm text-gray-900">Online Payment</p>
                     <p className="text-xs text-gray-500">Pay securely via Razorpay (UPI, Cards, Net Banking)</p>
                   </div>
-                </label>
-                <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition ${paymentMethod === 'cod' ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="payment" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="accent-black" />
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-gray-600" />
-                    <div>
-                      <p className="font-bold text-sm text-gray-900">Cash on Delivery</p>
-                      <p className="text-xs text-gray-500">Pay when your order arrives</p>
-                    </div>
-                  </div>
-                </label>
+                </div>
               </div>
 
               <h3 className="font-black text-black uppercase tracking-wide text-sm mb-5">Price Details</h3>
@@ -607,9 +684,7 @@ function CheckoutContent() {
                   </>
                 ) : (
                   <>
-                    {isLoggedIn
-                      ? (paymentMethod === 'cod' ? 'Place Order (COD)' : 'Pay Now')
-                      : 'Sign In to Order'}
+                    {isLoggedIn ? 'Pay Now' : 'Sign In to Order'}
                     <CheckCircle className="w-4 h-4" />
                   </>
                 )}

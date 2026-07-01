@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronRight, Package, RotateCcw, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Package, RotateCcw } from 'lucide-react'
 
 interface UserData {
   id: string
-  email: string
+  email?: string | null
   name: string
   role?: string
 }
@@ -63,11 +63,37 @@ export default function ProfilePage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [profileForm, setProfileForm] = useState({ name: '', email: '' })
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileError, setProfileError] = useState('')
+
   const [addressForm, setAddressForm] = useState({
     label: 'Home', line1: '', line2: '', city: '', state: '', zipCode: '', country: '', isDefault: false,
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [savingAddress, setSavingAddress] = useState(false)
+  const [pinLookupLoading, setPinLookupLoading] = useState(false)
+
+  const fetchPinData = async (pin: string) => {
+    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) return
+    setPinLookupLoading(true)
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`)
+      const data = await res.json()
+      if (data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0]
+        setAddressForm(prev => ({
+          ...prev,
+          city: po.District || po.Division || prev.city,
+          state: po.State || prev.state,
+          country: po.Country || 'India',
+        }))
+      }
+    } catch {} finally {
+      setPinLookupLoading(false)
+    }
+  }
 
   const authHeaders = useMemo(() => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -107,6 +133,43 @@ export default function ProfilePage() {
     fetchAddresses()
     fetchOrders()
   }, [token])
+
+  const handleEditProfile = () => {
+    setProfileForm({ name: user?.name || '', email: user?.email || '' })
+    setProfileError('')
+    setEditingProfile(true)
+  }
+
+  const handleSaveProfile = async () => {
+    if (!user || !token) return
+    setSavingProfile(true)
+    setProfileError('')
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({
+          name: profileForm.name.trim() || user.name,
+          email: profileForm.email.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setProfileError(data.error || 'Failed to update profile')
+        return
+      }
+      const updated = await res.json()
+      const updatedUser = { ...user, name: updated.name, email: updated.email }
+      setUser(updatedUser)
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+      window.dispatchEvent(new CustomEvent('profileUpdated'))
+      setEditingProfile(false)
+    } catch {
+      setProfileError('Something went wrong. Please try again.')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   const resetForm = () => {
     setAddressForm({ label: 'Home', line1: '', line2: '', city: '', state: '', zipCode: '', country: '', isDefault: false })
@@ -165,7 +228,7 @@ export default function ProfilePage() {
     } catch {}
   }
 
-  const handleOrderAction = async (orderId: string, action: 'cancel' | 'return') => {
+  const handleOrderAction = async (orderId: string, action: 'return') => {
     if (!token) return
     setActionLoading(orderId)
     try {
@@ -228,14 +291,64 @@ export default function ProfilePage() {
         </div>
 
         {/* User Info Card */}
-        <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center text-white font-black text-lg flex-shrink-0">
+        <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center text-white font-black text-lg flex-shrink-0 mt-1">
             {user.name?.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <p className="font-bold text-gray-900 text-lg">{user.name}</p>
-            <p className="text-gray-500 text-sm">{user.email}</p>
-          </div>
+          {editingProfile ? (
+            <div className="flex-1 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Name</label>
+                  <input
+                    value={profileForm.name}
+                    onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Email</label>
+                  <input
+                    type="email"
+                    value={profileForm.email}
+                    onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    placeholder="your@email.com"
+                  />
+                </div>
+              </div>
+              {profileError && <p className="text-red-500 text-xs">{profileError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="bg-black text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 transition disabled:opacity-60"
+                >
+                  {savingProfile ? 'Saving…' : 'Save changes'}
+                </button>
+                <button
+                  onClick={() => setEditingProfile(false)}
+                  className="border border-gray-200 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-between">
+              <div>
+                <p className="font-bold text-gray-900 text-lg">{user.name}</p>
+                <p className="text-gray-500 text-sm">{user.email || 'No email added'}</p>
+              </div>
+              <button
+                onClick={handleEditProfile}
+                className="text-sm text-gray-600 hover:text-black font-semibold border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition"
+              >
+                Edit Profile
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tab Switcher */}
@@ -268,7 +381,6 @@ export default function ProfilePage() {
             ) : (
               orders.map((order) => {
                 const isExpanded = expandedOrderId === order.id
-                const canCancel = ['pending', 'accepted'].includes(order.status)
                 const canReturn = order.status === 'delivered'
 
                 return (
@@ -352,18 +464,8 @@ export default function ProfilePage() {
                         </div>
 
                         {/* Action Buttons */}
-                        {(canCancel || canReturn) && (
+                        {canReturn && (
                           <div className="flex gap-3">
-                            {canCancel && (
-                              <button
-                                onClick={() => handleOrderAction(order.id, 'cancel')}
-                                disabled={actionLoading === order.id}
-                                className="flex items-center gap-2 bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition disabled:opacity-50"
-                              >
-                                {actionLoading === order.id ? <span className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" /> : <X className="w-4 h-4" />}
-                                Cancel Order
-                              </button>
-                            )}
                             {canReturn && (
                               <button
                                 onClick={() => handleOrderAction(order.id, 'return')}
@@ -399,14 +501,28 @@ export default function ProfilePage() {
                   <input value={addressForm.label} onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })} placeholder="Label (Home, Work)" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
                   <input value={addressForm.line1} onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })} placeholder="Address line 1 *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
                   <input value={addressForm.line2} onChange={(e) => setAddressForm({ ...addressForm, line2: e.target.value })} placeholder="Address line 2 (optional)" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
+                  <div className="relative">
+                    <input
+                      value={addressForm.zipCode}
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, '')
+                        setAddressForm({ ...addressForm, zipCode: v })
+                        fetchPinData(v)
+                      }}
+                      placeholder="PIN Code *"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm pr-8"
+                    />
+                    {pinLookupLoading && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-gray-300 border-t-black rounded-full animate-spin" />
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} placeholder="City *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
                     <input value={addressForm.state} onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })} placeholder="State *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={addressForm.zipCode} onChange={(e) => setAddressForm({ ...addressForm, zipCode: e.target.value })} placeholder="PIN Code *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
-                    <input value={addressForm.country} onChange={(e) => setAddressForm({ ...addressForm, country: e.target.value })} placeholder="Country *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
-                  </div>
+                  <input value={addressForm.country} onChange={(e) => setAddressForm({ ...addressForm, country: e.target.value })} placeholder="Country *" className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-black focus:outline-none text-sm" />
                   <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" checked={addressForm.isDefault} onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })} />
                     Set as default shipping address

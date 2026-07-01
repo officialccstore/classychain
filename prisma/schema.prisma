@@ -12,11 +12,11 @@ datasource db {
 
 model User {
   id        String     @id @default(auto()) @map("_id") @db.ObjectId
-  email     String?    @unique
+  email     String?
   password  String?
   name      String     @default("User")
   role      String     @default("user")
-  phone     String?
+  phone     String?    @unique
   address   String?
   city      String?
   state     String?
@@ -28,8 +28,6 @@ model User {
   reviews   Review[]
   cartItems CartItem[]
   addresses Address[]
-
-  @@index([phone])
 }
 
 model Subfamily {
@@ -132,29 +130,33 @@ model Order {
 }
 
 model OrderItem {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  orderId   String   @db.ObjectId
-  order     Order    @relation(fields: [orderId], references: [id])
-  productId String   @db.ObjectId
-  product   Product  @relation(fields: [productId], references: [id])
-  quantity  Int
-  price     Float
-  size      String?
-  color     String?
-  createdAt DateTime @default(now())
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  orderId       String    @db.ObjectId
+  order         Order     @relation(fields: [orderId], references: [id])
+  productId     String?   @db.ObjectId
+  product       Product?  @relation(fields: [productId], references: [id])
+  dealProductId String?
+  itemName      String?
+  quantity      Int
+  price         Float
+  size          String?
+  color         String?
+  createdAt     DateTime  @default(now())
 }
 
 model CartItem {
   id            String       @id @default(auto()) @map("_id") @db.ObjectId
   userId        String       @db.ObjectId
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId     String       @db.ObjectId
-  product       Product      @relation(fields: [productId], references: [id])
+  productId     String?      @db.ObjectId
+  product       Product?     @relation(fields: [productId], references: [id])
   quantity      Int          @default(1)
   sizeVariantId String?      @db.ObjectId
   sizeVariant   SizeVariant? @relation(fields: [sizeVariantId], references: [id])
   size          String?
   color         String?
+  dealProductId String?      @db.ObjectId
+  dealProduct   DealProduct? @relation(fields: [dealProductId], references: [id])
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -196,6 +198,21 @@ model SiteConfig {
   id    String @id @default(auto()) @map("_id") @db.ObjectId
   key   String @unique
   value String // JSON string
+}
+
+model DealProduct {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  description  String
+  category     String
+  sizeVariants Json       // [{size: string, quantity: number}]
+  price        Int        @default(0)
+  image        String
+  images       String[]   @default([])
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  cartItems    CartItem[]
 }
 
 model Coupon {

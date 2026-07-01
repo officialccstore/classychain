@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     }
 
     // Find or create user
-    let user = await prisma.user.findUnique({ where: { email } })
+    let user = await prisma.user.findFirst({ where: { email } })
 
     if (!user) {
       user = await prisma.user.create({

@@ -9,7 +9,7 @@ import Nav from './Nav'
 
 interface UserData {
   id: string
-  email: string
+  email?: string | null
   name: string
   role: string
 }
@@ -78,11 +78,25 @@ export default function Header() {
     setIsLoading(false)
   }, [])
 
+  // Refresh user when profile is updated from another component
+  useEffect(() => {
+    const onProfileUpdated = () => {
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        try { setUser(JSON.parse(userData)) } catch {}
+      }
+    }
+    window.addEventListener('profileUpdated', onProfileUpdated)
+    return () => window.removeEventListener('profileUpdated', onProfileUpdated)
+  }, [])
+
   // Cart count
   useEffect(() => {
     const fetchCartCount = async () => {
+      const parseLen = (s: string | null) => { try { return s ? (JSON.parse(s) as any[]).length : 0 } catch { return 0 } }
       try {
         if (user) {
+          // For logged-in users: API cart includes both regular AND deal items now
           const token = localStorage.getItem('token')
           const response = await fetch('/api/cart', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
           if (!response.ok) { setCartCount(0); return }
@@ -90,8 +104,10 @@ export default function Header() {
           setCartCount(Array.isArray(data) ? data.length : Array.isArray(data?.items) ? data.items.length : 0)
           return
         }
-        const pending = localStorage.getItem('pendingCart')
-        setCartCount(pending ? (JSON.parse(pending) as any[]).length : 0)
+        // For guests: pending (regular) + deal (localStorage)
+        const regularCount = parseLen(localStorage.getItem('pendingCart'))
+        const dealCount = parseLen(localStorage.getItem('dealCart'))
+        setCartCount(regularCount + dealCount)
       } catch { setCartCount(0) }
     }
     fetchCartCount()

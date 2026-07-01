@@ -726,9 +726,9 @@ export default function Home() {
             <div>
               <h4 className="font-bold text-[11px] uppercase tracking-[0.25em] mb-6 text-white/40">Get in Touch</h4>
               <p className="text-sm text-white/30 mb-1">officialccstore@gmail.com</p>
-              <p className="text-sm text-white/30 mb-6">+91 98765 43210</p>
+              <a href="tel:+918287833844" className="block text-sm text-white/30 hover:text-amber-400 transition mb-6">+91 82878 33844</a>
               <div className="flex gap-5">
-                <a href="#" className="text-[11px] text-amber-400 hover:text-amber-300 transition font-bold uppercase tracking-widest">Instagram</a>
+                <a href="https://www.instagram.com/classychain_official_/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-amber-400 hover:text-amber-300 transition font-bold uppercase tracking-widest">Instagram</a>
               </div>
             </div>
           </div>

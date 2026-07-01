@@ -1,18 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { ShoppingCart, Flame, Clock } from 'lucide-react'
-import { showToast } from '@/components/Toast'
+import { Flame, Clock, SlidersHorizontal, X } from 'lucide-react'
+
+interface SizeVariant {
+  size: string
+  quantity: number
+}
 
 interface DealProduct {
   id: string
   name: string
-  price: number
-  mrp?: number
-  image: string
-  brand: string
   description: string
+  category: string
+  sizeVariants: SizeVariant[]
+  image: string
+  images?: string[]
+  price: number
 }
 
 interface Deal {
@@ -20,98 +25,31 @@ interface Deal {
   endDate: string
 }
 
+const CATEGORIES = [
+  'All Shoes',
+  'Formal Shoes',
+  'Loafers',
+  'Boots',
+  'Sneakers',
+  'Casual',
+  'Slippers & Sandals',
+  'Peshawari & Mules',
+]
+
+
 function useCountdown(endDate: string) {
   const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0, expired: false })
-
   useEffect(() => {
     const calc = () => {
       const diff = new Date(endDate).getTime() - Date.now()
       if (diff <= 0) { setTimeLeft({ h: 0, m: 0, s: 0, expired: true }); return }
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setTimeLeft({ h, m, s, expired: false })
+      setTimeLeft({ h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), expired: false })
     }
     calc()
     const id = setInterval(calc, 1000)
     return () => clearInterval(id)
   }, [endDate])
-
   return timeLeft
-}
-
-function ProductCard({ product }: { product: DealProduct }) {
-  const [addingId, setAddingId] = useState<string | null>(null)
-  const discount = product.mrp ? Math.round(((product.mrp - product.price) / product.mrp) * 100) : 0
-
-  const handleAddToCart = async () => {
-    setAddingId(product.id)
-    try {
-      const token = localStorage.getItem('token')
-      if (token) {
-        const res = await fetch('/api/cart', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ productId: product.id, quantity: 1 }),
-        })
-        if (!res.ok) throw new Error()
-        window.dispatchEvent(new CustomEvent('cartUpdated'))
-        showToast(`${product.name} added to cart!`, 'success', 3000)
-      } else {
-        const pendingCart = JSON.parse(localStorage.getItem('pendingCart') || '[]')
-        const existing = pendingCart.find((i: any) => i.productId === product.id)
-        if (existing) existing.quantity += 1
-        else pendingCart.push({ productId: product.id, quantity: 1 })
-        localStorage.setItem('pendingCart', JSON.stringify(pendingCart))
-        window.dispatchEvent(new CustomEvent('cartUpdated'))
-        showToast(`${product.name} added to cart!`, 'success', 3000)
-      }
-    } catch {
-      showToast('Failed to add to cart', 'error', 3000)
-    } finally {
-      setAddingId(null)
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-amber-100 shadow-sm hover:shadow-md transition-all">
-      <Link href={`/products/${product.id}`}>
-        <div className="aspect-square relative overflow-hidden bg-gray-50">
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
-          {discount > 0 && (
-            <div className="absolute top-3 left-3 bg-black text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wide">
-              -{discount}%
-            </div>
-          )}
-        </div>
-      </Link>
-      <div className="p-4">
-        {product.brand && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{product.brand}</p>}
-        <Link href={`/products/${product.id}`}>
-          <h3 className="font-bold text-sm text-gray-900 line-clamp-2 mb-3 hover:text-black leading-snug">{product.name}</h3>
-        </Link>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <span className="text-base font-black text-black">₹{product.price.toLocaleString('en-IN')}</span>
-            {product.mrp && product.mrp > product.price && (
-              <span className="text-xs text-gray-400 line-through ml-2">₹{product.mrp.toLocaleString('en-IN')}</span>
-            )}
-          </div>
-          <button
-            onClick={handleAddToCart}
-            disabled={addingId === product.id}
-            className="flex items-center gap-1.5 bg-black text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-amber-400 hover:text-black transition disabled:opacity-50"
-          >
-            {addingId === product.id ? (
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <><ShoppingCart className="w-3.5 h-3.5" /> Add</>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function CountdownTimer({ endDate }: { endDate: string }) {
@@ -132,9 +70,39 @@ function CountdownTimer({ endDate }: { endDate: string }) {
   )
 }
 
+function ProductCard({ product }: { product: DealProduct }) {
+  return (
+    <Link href={`/deals/${product.id}`} className="group">
+      <div className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-200 transition-all duration-300">
+        <div className="relative aspect-square bg-gray-50 overflow-hidden">
+          <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          <div className="absolute top-2.5 left-2.5">
+            <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wide">Deal</span>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+            <div className="w-full flex items-center justify-center bg-white text-black py-2 rounded-lg font-bold text-xs uppercase tracking-wide">
+              View Details
+            </div>
+          </div>
+        </div>
+        <div className="p-4">
+          <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-1">{product.category}</p>
+          <h3 className="text-sm font-bold text-gray-900 line-clamp-2 mb-2 group-hover:text-black transition leading-snug">{product.name}</h3>
+          <span className="text-base font-black text-black">
+            {product.price > 0 ? `₹${product.price.toLocaleString('en-IN')}` : 'Special Price'}
+          </span>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 export default function DealsPage() {
   const [deal, setDeal] = useState<Deal | null>(null)
   const [loading, setLoading] = useState(true)
+  const [activeCategory, setActiveCategory] = useState('All Shoes')
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([])
+  const [showSizeFilter, setShowSizeFilter] = useState(false)
 
   useEffect(() => {
     fetch('/api/deal')
@@ -143,6 +111,26 @@ export default function DealsPage() {
       .catch(() => setDeal(null))
       .finally(() => setLoading(false))
   }, [])
+
+  const toggleSize = (size: string) => {
+    setSelectedSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size])
+  }
+
+  const availableSizes = useMemo(() => {
+    if (!deal) return []
+    const sizeSet = new Set<string>()
+    deal.products.forEach(p => p.sizeVariants.forEach(sv => sizeSet.add(sv.size)))
+    return Array.from(sizeSet).sort((a, b) => parseFloat(a) - parseFloat(b))
+  }, [deal])
+
+  const filtered = useMemo(() => {
+    if (!deal) return []
+    return deal.products.filter(p => {
+      const catMatch = activeCategory === 'All Shoes' || p.category === activeCategory
+      const sizeMatch = selectedSizes.length === 0 || selectedSizes.some(s => p.sizeVariants.some(sv => sv.size === s))
+      return catMatch && sizeMatch
+    })
+  }, [deal, activeCategory, selectedSizes])
 
   if (loading) {
     return (
@@ -179,14 +167,91 @@ export default function DealsPage() {
         </div>
       </div>
 
-      {/* Products */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-        <p className="text-sm text-gray-400 mb-8">{deal.products.length} product{deal.products.length > 1 ? 's' : ''} on deal today</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {deal.products.map(product => (
-            <ProductCard key={product.id} product={product} />
-          ))}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        {/* Category Filter */}
+        <div className="mb-6 overflow-x-auto pb-1">
+          <div className="flex gap-2 min-w-max">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition border ${
+                  activeCategory === cat
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Size Filter */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowSizeFilter(v => !v)}
+            className="flex items-center gap-2 text-sm font-bold text-gray-700 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 transition"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            Filter by Size
+            {selectedSizes.length > 0 && (
+              <span className="bg-black text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{selectedSizes.length}</span>
+            )}
+          </button>
+
+          {showSizeFilter && (
+            <div className="mt-3 p-4 border border-gray-200 rounded-xl bg-gray-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">UK Sizes</p>
+                {selectedSizes.length > 0 && (
+                  <button onClick={() => setSelectedSizes([])} className="text-xs text-gray-400 hover:text-black flex items-center gap-1">
+                    <X className="w-3 h-3" /> Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {availableSizes.map(size => {
+                  const active = selectedSizes.includes(size)
+                  return (
+                    <button
+                      key={size}
+                      onClick={() => toggleSize(size)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
+                        active ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      UK {size}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Results count */}
+        <p className="text-sm text-gray-400 mb-6">
+          {filtered.length} product{filtered.length !== 1 ? 's' : ''}
+          {activeCategory !== 'All Shoes' ? ` in ${activeCategory}` : ''}
+          {selectedSizes.length > 0 ? ` · UK ${selectedSizes.join(', ')}` : ''}
+        </p>
+
+        {/* Product Grid */}
+        {filtered.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            {filtered.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <p className="text-gray-400 font-medium">No products match your filters</p>
+            <button onClick={() => { setActiveCategory('All Shoes'); setSelectedSizes([]) }} className="text-sm font-bold text-black underline">
+              Clear filters
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

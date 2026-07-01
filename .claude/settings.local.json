@@ -17,7 +17,15 @@
       "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); const keys = Object.keys\\(lr\\); console.log\\(''Total exports:'', keys.length\\); console.log\\(''Sample:'', keys.slice\\(0,5\\)\\); console.log\\(''Has Heart:'', keys.includes\\(''Heart''\\)\\); console.log\\(''Has MapPin:'', keys.includes\\(''MapPin''\\)\\)\")",
       "Bash(node -e \"const lr = require\\(''./node_modules/lucide-react/dist/cjs/lucide-react.js''\\); console.log\\(''Heart type:'', typeof lr.Heart, ''Heart name:'', lr.Heart?.name\\); console.log\\(''ArrowRight type:'', typeof lr.ArrowRight, lr.ArrowRight?.name\\)\")",
       "Bash(nvm use:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(mkdir -p /Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/deal-products/[id])",
+      "Bash(mkdir -p \"/Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/deal-products/[id]\")",
+      "Bash(mkdir -p \"/Users/mayankpratapsingh/Documents/classychain/src/app/deals/[id]\")",
+      "Bash(mkdir -p \"/Users/mayankpratapsingh/Documents/classychain/src/app/api/deal/[id]\")",
+      "Bash(PATH=/Users/mayankpratapsingh/.nvm/versions/node/v20.19.4/bin:__TRACKED_VAR__ npm run build)"
+    ],
+    "additionalDirectories": [
+      "/Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/deal-products"
     ]
   }
 }

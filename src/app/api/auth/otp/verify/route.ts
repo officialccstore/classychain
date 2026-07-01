@@ -22,30 +22,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 })
     }
 
-    // Mark OTP as used
     await prisma.otpVerification.update({
       where: { id: record.id },
       data: { used: true },
     })
 
-    // Find or create user by phone
-    let user = await prisma.user.findFirst({ where: { phone } })
+    const existingUser = await prisma.user.findUnique({ where: { phone } })
 
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          phone,
-          name: 'ClassyChain User',
-        },
+    if (existingUser) {
+      const token = signToken({ id: existingUser.id, email: existingUser.email, role: existingUser.role })
+      return NextResponse.json({
+        user: { id: existingUser.id, email: existingUser.email, name: existingUser.name, role: existingUser.role, phone: existingUser.phone },
+        token,
       })
     }
 
-    const token = signToken({ id: user.id, email: user.email, role: user.role })
-
-    return NextResponse.json({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone },
-      token,
-    })
+    // New user — issue a short-lived setup token; account created after profile step
+    const setupToken = signToken({ phone, purpose: 'setup' }, '15m')
+    return NextResponse.json({ isNewUser: true, setupToken })
   } catch (error: any) {
     console.error('OTP verify error:', error)
     return NextResponse.json({ error: 'Failed to verify OTP' }, { status: 500 })

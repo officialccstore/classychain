@@ -13,12 +13,9 @@ export async function GET() {
 
     if (now < start || now > end) return NextResponse.json({ deal: null })
 
-    const ids: string[] = deal.productIds || (deal.productId ? [deal.productId] : [])
-    if (ids.length === 0) return NextResponse.json({ deal: null })
-
-    const products = await prisma.product.findMany({
-      where: { id: { in: ids }, isVisible: true },
-      select: { id: true, name: true, price: true, mrp: true, image: true, brand: true, description: true },
+    const products = await prisma.dealProduct.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
     })
 
     if (products.length === 0) return NextResponse.json({ deal: null })

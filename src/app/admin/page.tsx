@@ -142,15 +142,22 @@ export default function AdminPage() {
   const [newReel, setNewReel] = useState<{ url: string; title: string; page: 'home' | 'about' | 'both' }>({ url: '', title: '', page: 'both' });
 
   // Deal of the Day state
-  interface DealProduct { id: string; name: string; price: number; mrp?: number; image: string; brand: string }
-  const [dealProducts, setDealProducts] = useState<DealProduct[]>([]);
+  interface DealSizeVariant { size: string; quantity: number }
+  interface DealProductItem { id: string; name: string; description: string; category: string; sizeVariants: DealSizeVariant[]; image: string; images?: string[]; price?: number; isActive: boolean }
+  const DEAL_CATEGORIES = ['Formal Shoes', 'Loafers', 'Boots', 'Sneakers', 'Casual', 'Slippers & Sandals', 'Peshawari & Mules'];
+  const [dealItems, setDealItems] = useState<DealProductItem[]>([]);
   const [dealStartDate, setDealStartDate] = useState('');
   const [dealEndDate, setDealEndDate] = useState('');
-  const [dealSearch, setDealSearch] = useState('');
-  const [dealSearchResults, setDealSearchResults] = useState<DealProduct[]>([]);
   const [dealSaving, setDealSaving] = useState(false);
   const [dealSaveMsg, setDealSaveMsg] = useState('');
-  const [dealSearchLoading, setDealSearchLoading] = useState(false);
+  const [dealForm, setDealForm] = useState({ name: '', description: '', category: 'Formal Shoes', sizeVariants: [] as DealSizeVariant[], image: '', image2: '', image3: '', price: '' });
+  const [dealSizeInput, setDealSizeInput] = useState('');
+  const [dealQtyInput, setDealQtyInput] = useState('1');
+  const [dealFormSaving, setDealFormSaving] = useState(false);
+  const [dealFormError, setDealFormError] = useState('');
+  const [deletingDealItem, setDeletingDealItem] = useState<string | null>(null);
+  const [editingDealId, setEditingDealId] = useState<string | null>(null);
+  const [dealFormKey, setDealFormKey] = useState(0);
 
   // Load admin name on mount
   useEffect(() => {
@@ -238,39 +245,122 @@ export default function AdminPage() {
   const fetchDeal = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/deal', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) {
-        const d = await res.json();
+      const [dealRes, itemsRes] = await Promise.all([
+        fetch('/api/admin/deal', { headers: token ? { Authorization: `Bearer ${token}` } : {} }),
+        fetch('/api/admin/deal-products', { headers: token ? { Authorization: `Bearer ${token}` } : {} }),
+      ]);
+      if (dealRes.ok) {
+        const d = await dealRes.json();
         if (d.deal) {
-          const ids: string[] = d.deal.productIds || (d.deal.productId ? [d.deal.productId] : []);
-          if (ids.length > 0) {
-            const fetched = await Promise.all(ids.map((id: string) => fetch(`/api/products/${id}`).then(r => r.ok ? r.json() : null)));
-            setDealProducts(fetched.filter(Boolean));
-          }
           setDealStartDate(d.deal.startDate ? d.deal.startDate.slice(0, 16) : '');
           setDealEndDate(d.deal.endDate ? d.deal.endDate.slice(0, 16) : '');
         }
       }
+      if (itemsRes.ok) {
+        const items = await itemsRes.json();
+        setDealItems(Array.isArray(items) ? items : []);
+      }
     } catch {}
   };
 
-  const searchDealProducts = async (q: string) => {
-    if (!q.trim()) { setDealSearchResults([]); return; }
-    setDealSearchLoading(true);
+  const addDealSize = () => {
+    const s = dealSizeInput.trim();
+    const q = parseInt(dealQtyInput, 10);
+    if (!s || isNaN(q) || q < 1) return;
+    if (dealForm.sizeVariants.some(sv => sv.size === s)) return;
+    setDealForm(f => ({ ...f, sizeVariants: [...f.sizeVariants, { size: s, quantity: q }] }));
+    setDealSizeInput(''); setDealQtyInput('1');
+  };
+
+  const resetDealForm = () => {
+    setDealForm({ name: '', description: '', category: 'Formal Shoes', sizeVariants: [], image: '', image2: '', image3: '', price: '' });
+    setDealSizeInput(''); setDealQtyInput('1');
+    setDealFormError('');
+    setEditingDealId(null);
+    setDealFormKey(k => k + 1);
+  };
+
+  const startEditDealItem = (item: DealProductItem) => {
+    setDealForm({
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      sizeVariants: item.sizeVariants,
+      image: item.image,
+      image2: item.images?.[0] || '',
+      image3: item.images?.[1] || '',
+      price: item.price ? String(item.price) : '',
+    });
+    setEditingDealId(item.id);
+    setDealFormKey(k => k + 1);
+    setDealFormError('');
+    document.getElementById('deal-product-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const saveDealItem = async () => {
+    if (!dealForm.name.trim() || !dealForm.image || dealForm.sizeVariants.length === 0) {
+      setDealFormError('Name, image, and at least one size are required'); return;
+    }
+    setDealFormSaving(true); setDealFormError('');
+    const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&limit=10`);
-      if (res.ok) { const d = await res.json(); setDealSearchResults(Array.isArray(d.products) ? d.products : []); }
-    } catch {} finally { setDealSearchLoading(false); }
+      const extraImages = [dealForm.image2, dealForm.image3].filter(Boolean);
+      const payload = { name: dealForm.name, description: dealForm.description, category: dealForm.category, sizeVariants: dealForm.sizeVariants, image: dealForm.image, images: extraImages, price: Number(dealForm.price) || 0 };
+
+      if (editingDealId) {
+        const res = await fetch(`/api/admin/deal-products/${editingDealId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error();
+        const updated = await res.json();
+        setDealItems(prev => prev.map(d => d.id === editingDealId ? updated : d));
+      } else {
+        const res = await fetch('/api/admin/deal-products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error();
+        const created = await res.json();
+        setDealItems(prev => [created, ...prev]);
+      }
+      resetDealForm();
+    } catch { setDealFormError('Failed to save product'); }
+    finally { setDealFormSaving(false); }
+  };
+
+  const deleteDealItem = async (id: string) => {
+    setDeletingDealItem(id);
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`/api/admin/deal-products/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      setDealItems(prev => prev.filter(d => d.id !== id));
+      if (editingDealId === id) resetDealForm();
+    } catch {} finally { setDeletingDealItem(null); }
+  };
+
+  const toggleDealItem = async (id: string, isActive: boolean) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`/api/admin/deal-products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ isActive }),
+      });
+      setDealItems(prev => prev.map(d => d.id === id ? { ...d, isActive } : d));
+    } catch {}
   };
 
   const saveDeal = async () => {
-    if (dealProducts.length === 0 || !dealStartDate || !dealEndDate) { setDealSaveMsg('Add at least one product, start date, and end date.'); return; }
+    if (!dealStartDate || !dealEndDate) { setDealSaveMsg('Set start and end dates.'); return; }
     setDealSaving(true); setDealSaveMsg('');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: { productIds: dealProducts.map(p => p.id), startDate: new Date(dealStartDate).toISOString(), endDate: new Date(dealEndDate).toISOString() } }) });
+      const res = await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: { startDate: new Date(dealStartDate).toISOString(), endDate: new Date(dealEndDate).toISOString() } }) });
       if (!res.ok) throw new Error();
-      setDealSaveMsg('Deal of the Day saved!');
+      setDealSaveMsg('Deal window saved!');
     } catch { setDealSaveMsg('Save failed.'); }
     finally { setDealSaving(false); setTimeout(() => setDealSaveMsg(''), 3000); }
   };
@@ -279,7 +369,7 @@ export default function AdminPage() {
     const token = localStorage.getItem('token');
     try {
       await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: null }) });
-      setDealProducts([]); setDealStartDate(''); setDealEndDate(''); setDealSaveMsg('Deal cleared.');
+      setDealStartDate(''); setDealEndDate(''); setDealSaveMsg('Deal cleared.');
       setTimeout(() => setDealSaveMsg(''), 3000);
     } catch {}
   };
@@ -2480,118 +2570,184 @@ export default function AdminPage() {
 
         {/* ── Deals Tab ── */}
         {activeTab === 'deals' && (
-          <div className="p-6 sm:p-8 max-w-3xl">
+          <div className="p-6 sm:p-8 max-w-4xl space-y-6">
             {dealSaveMsg && (
-              <div className={`mb-5 px-4 py-3 rounded-lg text-sm font-semibold ${dealSaveMsg.includes('failed') || dealSaveMsg.includes('Select') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{dealSaveMsg}</div>
+              <div className={`px-4 py-3 rounded-lg text-sm font-semibold ${dealSaveMsg.includes('failed') || dealSaveMsg.includes('Set') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{dealSaveMsg}</div>
             )}
 
-            {/* Product Search */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
-              <h2 className="text-base font-black text-black mb-1">Select Products</h2>
-              <p className="text-xs text-gray-400 mb-4">Search and add products for this deal — no limit</p>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  value={dealSearch}
-                  onChange={e => { setDealSearch(e.target.value); searchDealProducts(e.target.value); }}
-                  placeholder="Search by name or brand…"
-                  className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
-                />
+            {/* Add / Edit Deal Product Form */}
+            <div id="deal-product-form" className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-base font-black text-black">{editingDealId ? 'Edit Deal Product' : 'Add Deal Product'}</h2>
+                {editingDealId && (
+                  <button onClick={resetDealForm} className="text-xs font-bold text-gray-500 hover:text-black border border-gray-200 rounded-lg px-3 py-1.5 transition">
+                    Cancel Edit
+                  </button>
+                )}
               </div>
-              {dealSearchLoading && <p className="text-xs text-gray-400 mb-2">Searching…</p>}
-              {dealSearchResults.length > 0 && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden divide-y divide-gray-50 mb-4">
-                  {dealSearchResults.filter(p => !dealProducts.some(d => d.id === p.id)).map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => { setDealProducts(prev => [...prev, p]); setDealSearchResults([]); setDealSearch(''); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition"
-                    >
-                      {p.image && <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-gray-900 truncate">{p.name}</p>
-                        <p className="text-xs text-gray-400">{p.brand} · ₹{p.price.toLocaleString('en-IN')}</p>
-                      </div>
-                      <Plus className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    </button>
-                  ))}
+              <p className="text-xs text-gray-400 mb-5">These products are exclusive to Deal of the Day — separate from the main catalogue</p>
+              {dealFormError && <p className="text-xs text-red-600 font-semibold mb-3">{dealFormError}</p>}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Product Name *</label>
+                    <input value={dealForm.name} onChange={e => setDealForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Derby Oxford" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Category *</label>
+                    <select value={dealForm.category} onChange={e => setDealForm(f => ({ ...f, category: e.target.value }))} className={inputCls}>
+                      {DEAL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
                 </div>
-              )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Price (₹) *</label>
+                    <input type="number" min={0} value={dealForm.price} onChange={e => setDealForm(f => ({ ...f, price: e.target.value }))} placeholder="e.g. 1299" className={inputCls} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Description</label>
+                  <textarea value={dealForm.description} onChange={e => setDealForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description of the product…" rows={2} className={inputCls + ' resize-none'} />
+                </div>
+                <div>
+                  <label className={labelCls}>Sizes &amp; Quantity (UK) *</label>
+                  <div className="flex gap-2 mt-1">
+                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-black transition flex-1">
+                      <span className="px-2.5 py-2 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-500 select-none whitespace-nowrap">UK</span>
+                      <input
+                        value={dealSizeInput}
+                        onChange={e => setDealSizeInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addDealSize()}
+                        placeholder="e.g. 8, 8.5, 10"
+                        className="flex-1 px-2.5 py-2 text-sm outline-none bg-white"
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      value={dealQtyInput}
+                      onChange={e => setDealQtyInput(e.target.value)}
+                      placeholder="Qty"
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-black transition"
+                    />
+                    <button type="button" onClick={addDealSize} className="px-3 py-2 bg-black text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition whitespace-nowrap">
+                      + Add
+                    </button>
+                  </div>
+                  {dealForm.sizeVariants.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {dealForm.sizeVariants.map(sv => (
+                        <div key={sv.size} className="flex items-center gap-1 bg-black text-white text-xs font-bold px-2.5 py-1 rounded-lg">
+                          UK {sv.size} × {sv.quantity}
+                          <button type="button" onClick={() => setDealForm(f => ({ ...f, sizeVariants: f.sizeVariants.filter(s => s.size !== sv.size) }))} className="ml-1 hover:text-gray-300 transition">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className={labelCls}>Main Image *</label>
+                    <ImageUpload key={`deal-img-main-${dealFormKey}`} label="" currentImage={dealForm.image} onUploadComplete={url => setDealForm(f => ({ ...f, image: url }))} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Image 2 (optional)</label>
+                    <ImageUpload key={`deal-img-2-${dealFormKey}`} label="" currentImage={dealForm.image2} onUploadComplete={url => setDealForm(f => ({ ...f, image2: url }))} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Image 3 (optional)</label>
+                    <ImageUpload key={`deal-img-3-${dealFormKey}`} label="" currentImage={dealForm.image3} onUploadComplete={url => setDealForm(f => ({ ...f, image3: url }))} />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={saveDealItem} disabled={dealFormSaving} className={primaryBtn}>
+                    {dealFormSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : editingDealId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    {editingDealId ? 'Update Product' : 'Add Product'}
+                  </button>
+                </div>
+              </div>
+            </div>
 
-              {dealProducts.length > 0 ? (
-                <div className="space-y-2 mt-2">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{dealProducts.length} product{dealProducts.length > 1 ? 's' : ''} selected</p>
-                  {dealProducts.map(p => (
-                    <div key={p.id} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                      {p.image && <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />}
+            {/* Existing Deal Products List */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h2 className="text-base font-black text-black mb-1">Deal Products ({dealItems.length})</h2>
+              <p className="text-xs text-gray-400 mb-4">Toggle active/inactive to control what users see during the deal window</p>
+              {dealItems.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">No deal products yet — add one above</p>
+              ) : (
+                <div className="space-y-3">
+                  {dealItems.map(item => (
+                    <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl border transition ${item.isActive ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
+                      {item.image && <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black text-gray-900 truncate">{p.name}</p>
-                        <p className="text-xs text-gray-500">{p.brand} · ₹{p.price.toLocaleString('en-IN')}</p>
+                        <p className="text-sm font-black text-gray-900 truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.category}{item.price ? ` · ₹${item.price.toLocaleString('en-IN')}` : ''}</p>
+                        {item.images && item.images.length > 0 && <p className="text-[10px] text-gray-400 mb-1">{item.images.length + 1} images</p>}
+                        <div className="flex flex-wrap gap-1">
+                          {(item.sizeVariants || []).map(sv => <span key={sv.size} className="text-[10px] font-bold px-1.5 py-0.5 bg-white border border-gray-200 rounded text-gray-600">UK {sv.size} ×{sv.quantity}</span>)}
+                        </div>
                       </div>
-                      <button onClick={() => setDealProducts(prev => prev.filter(d => d.id !== p.id))} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition">
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => toggleDealItem(item.id, !item.isActive)}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition ${item.isActive ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}`}
+                        >
+                          {item.isActive ? 'Active' : 'Inactive'}
+                        </button>
+                        <button
+                          onClick={() => startEditDealItem(item)}
+                          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteDealItem(item.id)}
+                          disabled={deletingDealItem === item.id}
+                          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition disabled:opacity-50"
+                        >
+                          {deletingDealItem === item.id ? <span className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" /> : <X className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <p className="text-xs text-gray-400 italic">No products added yet</p>
               )}
             </div>
 
-            {/* Date & Time */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+            {/* Deal Window */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <h2 className="text-base font-black text-black mb-1 flex items-center gap-2"><Clock className="w-4 h-4" /> Deal Window</h2>
-              <p className="text-xs text-gray-400 mb-5">Deal auto-hides on the homepage after the end time</p>
+              <p className="text-xs text-gray-400 mb-5">The deal banner and products are only visible between these times</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Start Date &amp; Time</label>
-                  <input
-                    type="datetime-local"
-                    value={dealStartDate}
-                    onChange={e => setDealStartDate(e.target.value)}
-                    className={inputCls}
-                    placeholder="YYYY-MM-DDT09:00"
-                  />
+                  <input type="datetime-local" value={dealStartDate} onChange={e => setDealStartDate(e.target.value)} className={inputCls} />
                   <p className="text-[10px] text-gray-400 mt-1">Default: 9:00 AM</p>
                 </div>
                 <div>
                   <label className={labelCls}>End Date &amp; Time</label>
-                  <input
-                    type="datetime-local"
-                    value={dealEndDate}
-                    onChange={e => setDealEndDate(e.target.value)}
-                    className={inputCls}
-                  />
+                  <input type="datetime-local" value={dealEndDate} onChange={e => setDealEndDate(e.target.value)} className={inputCls} />
                   <p className="text-[10px] text-gray-400 mt-1">Default: 9:00 PM</p>
                 </div>
               </div>
               <div className="flex gap-3 mt-4 justify-end">
-                {(dealProducts.length > 0 || dealStartDate) && (
+                {dealStartDate && (
                   <button onClick={clearDeal} className={secondaryBtn}>
-                    <X className="w-4 h-4" /> Clear Deal
+                    <X className="w-4 h-4" /> Clear Window
                   </button>
                 )}
                 <button
                   onClick={() => {
-                    if (!dealStartDate) {
-                      const today = new Date();
-                      today.setHours(9, 0, 0, 0);
-                      setDealStartDate(today.toISOString().slice(0, 16));
-                    }
-                    if (!dealEndDate) {
-                      const today = new Date();
-                      today.setHours(21, 0, 0, 0);
-                      setDealEndDate(today.toISOString().slice(0, 16));
-                    }
+                    if (!dealStartDate) { const t = new Date(); t.setHours(9, 0, 0, 0); setDealStartDate(t.toISOString().slice(0, 16)); }
+                    if (!dealEndDate) { const t = new Date(); t.setHours(21, 0, 0, 0); setDealEndDate(t.toISOString().slice(0, 16)); }
                     saveDeal();
                   }}
-                  disabled={dealSaving || dealProducts.length === 0}
+                  disabled={dealSaving}
                   className={primaryBtn}
                 >
                   {dealSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Flame className="w-4 h-4" />}
-                  Save Deal
+                  Save Window
                 </button>
               </div>
             </div>

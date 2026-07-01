@@ -322,11 +322,12 @@ export default function ProductDetailPage() {
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ productId: product?.id, quantity, sizeVariantId: selectedVariantId, size: selectedSize, color: selectedColor }),
         })
+        const data = await res.json()
         if (res.ok) {
           showToast(`Added to cart!`, 'success', 3000)
           try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
         } else {
-          showToast('Failed to add item to cart', 'error', 3000)
+          showToast(data.error || 'Failed to add item to cart', 'error', 3000)
         }
       } else {
         const pendingCart = JSON.parse(localStorage.getItem('pendingCart') || '[]')
@@ -586,7 +587,12 @@ export default function ProductDetailPage() {
               <div className="flex items-center border-2 border-gray-200 rounded-lg overflow-hidden">
                 <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-50 text-xl font-bold transition">−</button>
                 <span className="w-10 h-12 flex items-center justify-center text-sm font-bold">{quantity}</span>
-                <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-50 text-xl font-bold transition">+</button>
+                <button onClick={() => {
+                  const sv = product.sizeVariants?.find(v => v.id === selectedVariantId)
+                  const cap = sv?.quantity ?? 99
+                  if (quantity >= cap) { showToast(`Only ${cap} unit${cap === 1 ? '' : 's'} available in this size`, 'error', 2000); return }
+                  setQuantity(quantity + 1)
+                }} className="w-10 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-50 text-xl font-bold transition">+</button>
               </div>
               <button
                 onClick={handleAddToCart}
@@ -608,7 +614,6 @@ export default function ProductDetailPage() {
             <div className="border-t border-gray-100 pt-5 space-y-2.5">
               {[
                 { icon: <Truck className="w-4 h-4" />, text: 'Free shipping on all orders' },
-                { icon: <RefreshCw className="w-4 h-4" />, text: '7-day easy returns' },
                 { icon: <Shield className="w-4 h-4" />, text: '100% authentic products' },
               ].map((p, i) => (
                 <div key={i} className="flex items-center gap-2.5 text-sm text-gray-500">
