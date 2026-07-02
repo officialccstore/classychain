@@ -514,7 +514,7 @@ export default function ProductDetailPage() {
             </div>
 
             <p className={`text-sm font-bold mb-5 ${totalStock > 0 ? 'text-green-600' : 'text-red-500'}`}>
-              {totalStock > 0 ? '✓ In Stock' : '✗ Out of Stock'}
+              {totalStock > 0 ? '✓ In Stock' : '✗ Out of Stock — you just missed it!'}
             </p>
 
             {/* Color Selection */}
@@ -563,6 +563,7 @@ export default function ProductDetailPage() {
                           key={`${v.id}-${sizeIdx}`}
                           onClick={() => { setSelectedVariantId(v.id); setSelectedSize(size); setSizeError(false) }}
                           disabled={isOOS}
+                          title={isOOS ? 'Out of stock — you just missed it!' : undefined}
                           className={`relative min-w-[52px] px-4 py-2.5 border-2 rounded-lg text-sm font-bold transition-all duration-200
                             ${isSelected ? 'border-black bg-black text-white scale-105 shadow-md' :
                               isOOS ? 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed' :
@@ -613,7 +614,6 @@ export default function ProductDetailPage() {
             {/* Promises */}
             <div className="border-t border-gray-100 pt-5 space-y-2.5">
               {[
-                { icon: <Truck className="w-4 h-4" />, text: 'Free shipping on all orders' },
                 { icon: <Shield className="w-4 h-4" />, text: '100% authentic products' },
               ].map((p, i) => (
                 <div key={i} className="flex items-center gap-2.5 text-sm text-gray-500">

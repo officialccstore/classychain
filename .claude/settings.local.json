@@ -22,7 +22,12 @@
       "Bash(mkdir -p \"/Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/deal-products/[id]\")",
       "Bash(mkdir -p \"/Users/mayankpratapsingh/Documents/classychain/src/app/deals/[id]\")",
       "Bash(mkdir -p \"/Users/mayankpratapsingh/Documents/classychain/src/app/api/deal/[id]\")",
-      "Bash(PATH=/Users/mayankpratapsingh/.nvm/versions/node/v20.19.4/bin:__TRACKED_VAR__ npm run build)"
+      "Bash(PATH=/Users/mayankpratapsingh/.nvm/versions/node/v20.19.4/bin:__TRACKED_VAR__ npm run build)",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(timeout 180 npx next build)",
+      "Bash(command -v nvm)",
+      "Read(//Users/mayankpratapsingh/.nvm/versions/node/**)"
     ],
     "additionalDirectories": [
       "/Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/deal-products"

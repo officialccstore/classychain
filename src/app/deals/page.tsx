@@ -71,17 +71,23 @@ function CountdownTimer({ endDate }: { endDate: string }) {
 }
 
 function ProductCard({ product }: { product: DealProduct }) {
+  const outOfStock = !product.sizeVariants || product.sizeVariants.length === 0 || product.sizeVariants.every(sv => sv.quantity === 0)
+
   return (
     <Link href={`/deals/${product.id}`} className="group">
       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-200 transition-all duration-300">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-          <div className="absolute top-2.5 left-2.5">
-            <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wide">Deal</span>
+          <img src={product.image} alt={product.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`} />
+          <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
+            {outOfStock ? (
+              <span title="You just missed it — out of stock" className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Sold Out</span>
+            ) : (
+              <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wide">Deal</span>
+            )}
           </div>
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
             <div className="w-full flex items-center justify-center bg-white text-black py-2 rounded-lg font-bold text-xs uppercase tracking-wide">
-              View Details
+              {outOfStock ? 'You Just Missed It' : 'View Details'}
             </div>
           </div>
         </div>

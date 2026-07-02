@@ -336,7 +336,6 @@ export default function Home() {
         <section className="bg-[#080808] border-t border-white/[0.05]">
           <div className="max-w-5xl mx-auto flex flex-col sm:flex-row">
             {[
-              { icon: <Truck className="w-4 h-4" />, label: "Free Shipping", sub: "Every order, every time" },
               { icon: <RefreshCw className="w-4 h-4" />, label: "Easy Returns", sub: "No questions asked, 30 days" },
               { icon: <Shield className="w-4 h-4" />, label: "100% Authentic", sub: "Real quality, real you" },
             ].map((b, i) => (

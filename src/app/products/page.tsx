@@ -477,7 +477,7 @@ function ProductsPageContent() {
                           {/* Badges */}
                           <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                             {isOutOfStock(product) ? (
-                              <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Sold Out</span>
+                              <span title="You just missed it — out of stock" className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Sold Out</span>
                             ) : product.mrp && product.mrp > product.price ? (
                               <span className="bg-black text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
                                 -{Math.round(((product.mrp - product.price) / product.mrp) * 100)}%
@@ -489,6 +489,7 @@ function ProductsPageContent() {
                             <button
                               onClick={(e) => handleAddToCart(e, product)}
                               disabled={addingId === product.id || isOutOfStock(product)}
+                              title={isOutOfStock(product) ? 'You just missed it — out of stock' : undefined}
                               className="w-full flex items-center justify-center gap-2 bg-white text-black py-2 rounded-lg font-bold text-xs uppercase tracking-wide hover:bg-amber-400 transition disabled:opacity-50"
                             >
                               {addingId === product.id ? (

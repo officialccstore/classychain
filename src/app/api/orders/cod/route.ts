@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
 import { sendOrderEmail } from '@/lib/email'
 import { generateInvoicePdf } from '@/lib/invoice'
+import { decrementStock, InsufficientStockError, StockCheckItem } from '@/lib/stock'
 
 export async function POST(request: Request) {
   try {
@@ -21,27 +22,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Shipping address is required' }, { status: 400 })
     }
 
-    const order = await prisma.order.create({
-      data: {
-        userId: auth.userId,
-        totalPrice: total,
-        paymentMethod: 'cod',
-        shippingAddress,
-        status: 'accepted',
-        items: {
-          create: items.map((item: any) => ({
-            productId: item.productId || null,
-            dealProductId: item.isDeal ? (item.dealProductId || item.productId) : null,
-            itemName: item.isDeal ? (item.product?.name || null) : null,
-            quantity: item.quantity,
-            price: item.product?.price || 0,
-            size: item.size || null,
-            color: item.color || null,
-          })),
-        },
-      },
-      include: { items: { include: { product: true } } },
-    })
+    const stockItems: StockCheckItem[] = items.map((item: any) => ({
+      cartItemId: item.id,
+      productId: item.productId || null,
+      dealProductId: item.dealProductId || (item.isDeal ? item.productId : null),
+      sizeVariantId: item.sizeVariantId || null,
+      size: item.size || null,
+      quantity: item.quantity,
+    }))
+
+    let order
+    try {
+      order = await prisma.$transaction(async (tx: any) => {
+        await decrementStock(tx, stockItems)
+
+        return tx.order.create({
+          data: {
+            userId: auth.userId,
+            totalPrice: total,
+            paymentMethod: 'cod',
+            shippingAddress,
+            status: 'accepted',
+            items: {
+              create: items.map((item: any) => ({
+                productId: item.productId || null,
+                dealProductId: item.isDeal ? (item.dealProductId || item.productId) : null,
+                itemName: item.isDeal ? (item.product?.name || null) : null,
+                quantity: item.quantity,
+                price: item.product?.price || 0,
+                size: item.size || null,
+                color: item.color || null,
+              })),
+            },
+          },
+          include: { items: { include: { product: true } } },
+        })
+      })
+    } catch (err) {
+      if (err instanceof InsufficientStockError) {
+        return NextResponse.json({ error: 'Some items in your order are no longer available', issues: err.issues }, { status: 409 })
+      }
+      throw err
+    }
 
     // Clear cart
     await prisma.cartItem.deleteMany({ where: { userId: auth.userId } })

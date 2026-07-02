@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { decrementStock, InsufficientStockError, StockCheckItem } from '@/lib/stock'
 
 export async function POST(request: Request) {
   try {
@@ -15,21 +16,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No items provided' }, { status: 400 })
     }
 
-    const order = await prisma.order.create({
-      data: {
-        userId: auth.userId,
-        totalPrice,
-        shippingAddress,
-        items: {
-          create: items.map((item: any) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-          })),
-        },
-      },
-      include: { items: { include: { product: true } } },
-    })
+    const stockItems: StockCheckItem[] = items.map((item: any) => ({
+      cartItemId: item.id,
+      productId: item.productId || null,
+      dealProductId: item.dealProductId || (item.isDeal ? item.productId : null),
+      sizeVariantId: item.sizeVariantId || null,
+      size: item.size || null,
+      quantity: item.quantity,
+    }))
+
+    let order
+    try {
+      order = await prisma.$transaction(async (tx: any) => {
+        await decrementStock(tx, stockItems)
+
+        return tx.order.create({
+          data: {
+            userId: auth.userId,
+            totalPrice,
+            shippingAddress,
+            items: {
+              create: items.map((item: any) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                price: item.price,
+              })),
+            },
+          },
+          include: { items: { include: { product: true } } },
+        })
+      })
+    } catch (err) {
+      if (err instanceof InsufficientStockError) {
+        return NextResponse.json({ error: 'Some items in your order are no longer available', issues: err.issues }, { status: 409 })
+      }
+      throw err
+    }
 
     // Clear cart for this user after order
     await prisma.cartItem.deleteMany({ where: { userId: auth.userId } })

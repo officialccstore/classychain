@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { CheckCircle, LogIn, ShoppingBag, Tag, X, MapPin, Plus } from 'lucide-react'
+import { showToast } from '@/components/Toast'
 
 interface Address {
   id: string
@@ -20,6 +21,8 @@ interface Address {
 interface CartItem {
   id: string
   productId: string
+  dealProductId?: string | null
+  sizeVariantId?: string | null
   quantity: number
   size?: string
   color?: string
@@ -304,6 +307,27 @@ function CheckoutContent() {
     })
   }
 
+  // Removes items the backend says are out of stock, then bounces the user back to
+  // the cart so they can see what's missing instead of silently dropping items.
+  const removeOutOfStockItemsAndReturnToCart = async (issues: Array<{ cartItemId?: string; name?: string }>, token: string | null) => {
+    const idsToRemove = new Set(issues.map(i => i.cartItemId).filter(Boolean) as string[])
+    if (idsToRemove.size > 0) {
+      await Promise.all(
+        Array.from(idsToRemove).map(id =>
+          fetch(`/api/cart/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : undefined }).catch(() => {})
+        )
+      )
+    }
+    const names = issues.map(i => i.name).filter(Boolean).join(', ')
+    showToast(
+      names ? `${names} just went out of stock in this size and ${issues.length === 1 ? 'was' : 'were'} removed from your cart` : 'Some items just went out of stock and were removed from your cart',
+      'error',
+      5000
+    )
+    try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
+    router.push('/cart')
+  }
+
   const handlePayment = async () => {
     if (!isLoggedIn) {
       localStorage.setItem('pendingCart', JSON.stringify(cartItems))
@@ -318,6 +342,19 @@ function CheckoutContent() {
     try {
       const token = localStorage.getItem('token')
       const shippingAddress = buildShippingAddress()
+
+      // Verify every item is still in stock before we let the customer pay for it.
+      const stockRes = await fetch('/api/checkout/validate-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ items: cartItems }),
+      })
+      const stockData = await stockRes.json()
+      if (!stockRes.ok || !stockData.valid) {
+        setPlacing(false)
+        await removeOutOfStockItemsAndReturnToCart(stockData.issues || [], token)
+        return
+      }
 
       const updatedUser = { ...user, name: shippingName.trim(), phone: shippingPhone.trim(), address: shippingLine1.trim(), city: shippingCity.trim(), state: shippingState.trim(), zipCode: shippingZip.trim(), country: shippingCountry.trim() }
       setUser(updatedUser)
@@ -362,6 +399,9 @@ function CheckoutContent() {
             try { localStorage.removeItem('dealCart') } catch {}
             try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
             router.push('/checkout?success=true')
+          } else if (verifyRes.status === 409 && Array.isArray(verifyData.issues)) {
+            setPlacing(false)
+            await removeOutOfStockItemsAndReturnToCart(verifyData.issues, token)
           } else {
             alert(verifyData.error || 'Payment verification failed. Please contact support.')
             setPlacing(false)
