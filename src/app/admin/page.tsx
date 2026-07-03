@@ -160,6 +160,7 @@ export default function AdminPage() {
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormKey, setDealFormKey] = useState(0);
   const [dealSearch, setDealSearch] = useState('');
+  const [dealPage, setDealPage] = useState(1);
   const [shippingRate, setShippingRate] = useState('');
   const [shippingRateSaving, setShippingRateSaving] = useState(false);
   const [shippingRateSaveMsg, setShippingRateSaveMsg] = useState('');
@@ -617,7 +618,7 @@ export default function AdminPage() {
       const token = localStorage.getItem('token');
       const params = new URLSearchParams();
       params.append('page', String(page));
-      params.append('limit', '12');
+      params.append('limit', '10');
       if (selectedCategoryFilter) params.append('categoryId', selectedCategoryFilter);
       if (selectedSubcategoryFilter) params.append('subcategoryId', selectedSubcategoryFilter);
       const res = await fetch(`/api/admin/products?${params.toString()}`, {
@@ -2726,6 +2727,57 @@ export default function AdminPage() {
               <div className={`px-4 py-3 rounded-lg text-sm font-semibold ${dealSaveMsg.includes('failed') || dealSaveMsg.includes('Set') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{dealSaveMsg}</div>
             )}
 
+            {/* Deal Schedule */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-base font-black text-black flex items-center gap-2"><Clock className="w-4 h-4" /> Deal of the Day Schedule</h2>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={dealEnabled}
+                  onClick={() => toggleDealEnabled(!dealEnabled)}
+                  disabled={dealSaving}
+                  className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${dealEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${dealEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">Runs automatically every day from 12:01 AM to 11:59 PM — no dates to set.</p>
+              <p className={`text-xs font-bold mt-3 ${dealEnabled ? 'text-green-600' : 'text-gray-400'}`}>
+                {dealEnabled
+                  ? '● ON — live on the homepage and /deals during the daily window.'
+                  : '○ OFF — hidden from the homepage and /deals, even by direct link.'}
+              </p>
+            </div>
+
+            {/* Shipping Rate */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h2 className="text-base font-black text-black mb-1 flex items-center gap-2"><Truck className="w-4 h-4" /> Shipping Rate</h2>
+              <p className="text-xs text-gray-400 mb-5">This amount is charged as shipping on every order at checkout. Leave at 0 for free shipping.</p>
+              {shippingRateSaveMsg && (
+                <div className={`px-4 py-3 rounded-lg text-sm font-semibold mb-4 ${shippingRateSaveMsg.includes('failed') || shippingRateSaveMsg.includes('valid') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{shippingRateSaveMsg}</div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Shipping Amount (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={shippingRate}
+                    onChange={e => setShippingRate(e.target.value)}
+                    placeholder="e.g. 99"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <button onClick={saveShippingRate} disabled={shippingRateSaving} className={primaryBtn}>
+                  {shippingRateSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Truck className="w-4 h-4" />}
+                  Save Shipping Rate
+                </button>
+              </div>
+            </div>
+
             {/* Add / Edit Deal Product Form */}
             <div id="deal-product-form" className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-1">
@@ -2829,22 +2881,27 @@ export default function AdminPage() {
                   type="text"
                   placeholder="Search deal products by name or category…"
                   value={dealSearch}
-                  onChange={e => setDealSearch(e.target.value)}
+                  onChange={e => { setDealSearch(e.target.value); setDealPage(1); }}
                   className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-sm mb-4 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
                 />
               )}
               {dealItems.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">No deal products yet — add one above</p>
               ) : (() => {
+                const DEAL_PAGE_SIZE = 10;
                 const q = dealSearch.trim().toLowerCase();
                 const filteredDealItems = q
                   ? dealItems.filter(item => item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q))
                   : dealItems;
+                const dealTotalPages = Math.max(1, Math.ceil(filteredDealItems.length / DEAL_PAGE_SIZE));
+                const safeDealPage = Math.min(dealPage, dealTotalPages);
+                const pagedDealItems = filteredDealItems.slice((safeDealPage - 1) * DEAL_PAGE_SIZE, safeDealPage * DEAL_PAGE_SIZE);
                 return filteredDealItems.length === 0 ? (
                   <p className="text-xs text-gray-400 italic">No deal products match "{dealSearch}"</p>
                 ) : (
+                <>
                 <div className="space-y-3">
-                  {filteredDealItems.map(item => (
+                  {pagedDealItems.map(item => (
                     <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl border transition ${item.isActive ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
                       {item.image && <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
@@ -2879,59 +2936,19 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
+                {dealTotalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 text-sm">
+                    <span className="text-gray-400 text-xs">Showing {pagedDealItems.length} of {filteredDealItems.length}</span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setDealPage(p => Math.max(1, p - 1))} disabled={safeDealPage === 1} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-40 hover:border-gray-400 transition">← Prev</button>
+                      <span className="text-xs text-gray-500">{safeDealPage} / {dealTotalPages}</span>
+                      <button onClick={() => setDealPage(p => Math.min(dealTotalPages, p + 1))} disabled={safeDealPage === dealTotalPages} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-40 hover:border-gray-400 transition">Next →</button>
+                    </div>
+                  </div>
+                )}
+                </>
                 );
               })()}
-            </div>
-
-            {/* Deal Schedule */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-base font-black text-black flex items-center gap-2"><Clock className="w-4 h-4" /> Deal of the Day Schedule</h2>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={dealEnabled}
-                  onClick={() => toggleDealEnabled(!dealEnabled)}
-                  disabled={dealSaving}
-                  className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${dealEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${dealEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                </button>
-              </div>
-              <p className="text-xs text-gray-400">Runs automatically every day from 12:01 AM to 11:59 PM — no dates to set.</p>
-              <p className={`text-xs font-bold mt-3 ${dealEnabled ? 'text-green-600' : 'text-gray-400'}`}>
-                {dealEnabled
-                  ? '● ON — live on the homepage and /deals during the daily window.'
-                  : '○ OFF — hidden from the homepage and /deals, even by direct link.'}
-              </p>
-            </div>
-
-            {/* Shipping Rate */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h2 className="text-base font-black text-black mb-1 flex items-center gap-2"><Truck className="w-4 h-4" /> Shipping Rate</h2>
-              <p className="text-xs text-gray-400 mb-5">This amount is charged as shipping on every order at checkout. Leave at 0 for free shipping.</p>
-              {shippingRateSaveMsg && (
-                <div className={`px-4 py-3 rounded-lg text-sm font-semibold mb-4 ${shippingRateSaveMsg.includes('failed') || shippingRateSaveMsg.includes('valid') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{shippingRateSaveMsg}</div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Shipping Amount (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={shippingRate}
-                    onChange={e => setShippingRate(e.target.value)}
-                    placeholder="e.g. 99"
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end mt-4">
-                <button onClick={saveShippingRate} disabled={shippingRateSaving} className={primaryBtn}>
-                  {shippingRateSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Truck className="w-4 h-4" />}
-                  Save Shipping Rate
-                </button>
-              </div>
             </div>
           </div>
         )}

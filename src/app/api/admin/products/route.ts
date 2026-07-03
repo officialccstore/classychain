@@ -63,15 +63,41 @@ export async function GET(request: Request) {
     if (!isAdminFromReq(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const products = await prisma.product.findMany({
-      include: {
-        category: true,
-        subcategory: true,
-        sizeVariants: true
+
+    const { searchParams } = new URL(request.url)
+    const categoryId = searchParams.get('categoryId')
+    const subcategoryId = searchParams.get('subcategoryId')
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+
+    const where: any = {}
+    if (categoryId) where.categoryId = categoryId
+    if (subcategoryId) where.subcategoryId = subcategoryId
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          category: true,
+          subcategory: true,
+          sizeVariants: true
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.product.count({ where }),
+    ])
+
+    return NextResponse.json({
+      products,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.max(1, Math.ceil(total / limit)),
       },
-      orderBy: { createdAt: 'desc' }
     })
-    return NextResponse.json(products)
   } catch (error) {
     console.error('Failed to fetch products:', error)
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
