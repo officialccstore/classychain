@@ -2186,26 +2186,70 @@ export default function AdminPage() {
                             {/* Products */}
                             <div className="bg-white rounded-xl border border-gray-100 p-4">
                               <p className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Products Ordered</p>
-                              <div className="space-y-3">
-                                {order.items?.map((item: any) => (
-                                  <div key={item.id} className="flex items-center gap-3">
-                                    {item.product?.image && (
-                                      <img src={item.product.image} alt={item.product.name} className="w-12 h-12 rounded-lg object-cover border border-gray-100" />
-                                    )}
-                                    <div className="flex-1">
-                                      <p className="font-semibold text-gray-900 text-sm">{item.product?.name || 'Product'}</p>
-                                      <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
-                                        {item.size && <span>Size: <strong>{item.size}</strong></span>}
-                                        {item.color && <span>Colour: <strong>{item.color}</strong></span>}
-                                        <span>Qty: <strong>{item.quantity}</strong></span>
+                              <div className="space-y-4">
+                                {order.items?.map((item: any) => {
+                                  const image = item.product?.image || item.itemImage;
+                                  const name = item.product?.name || item.itemName || 'Product';
+                                  const brand = item.product?.brand || item.itemBrand;
+                                  const category = item.product?.category?.name;
+                                  const subcategory = item.product?.subcategory?.name;
+                                  const mrp = item.product?.mrp;
+                                  const isDeal = !!item.dealProductId;
+                                  const productDeleted = !!item.productId && !item.product;
+                                  const productLink = item.productId ? `/products/${item.productId}` : isDeal ? `/deals/${item.dealProductId}` : null;
+                                  return (
+                                    <div key={item.id} className="flex items-start gap-3 pb-4 border-b border-gray-50 last:border-0 last:pb-0">
+                                      {image ? (
+                                        <img src={image} alt={name} className="w-16 h-16 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-2xl flex-none">👟</div>
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          {productLink ? (
+                                            <a
+                                              href={productLink}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="font-semibold text-gray-900 text-sm hover:text-black hover:underline inline-flex items-center gap-1"
+                                            >
+                                              {name}
+                                              <Eye className="w-3.5 h-3.5 text-gray-400" />
+                                            </a>
+                                          ) : (
+                                            <p className="font-semibold text-gray-900 text-sm">{name}</p>
+                                          )}
+                                          {isDeal && (
+                                            <span className="text-[9px] font-black uppercase tracking-wide text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                              Deal of the Day
+                                            </span>
+                                          )}
+                                          {productDeleted && (
+                                            <span className="text-[9px] font-bold text-red-500 italic">Product deleted</span>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 mt-1.5">
+                                          {brand && <span>Brand: <strong className="text-gray-700">{brand}</strong></span>}
+                                          {category && <span>Category: <strong className="text-gray-700">{category}</strong></span>}
+                                          {subcategory && <span>Style: <strong className="text-gray-700">{subcategory}</strong></span>}
+                                          {item.size && <span>Size: <strong className="text-gray-700">{item.size}</strong></span>}
+                                          {item.color && <span>Colour: <strong className="text-gray-700">{item.color}</strong></span>}
+                                          <span>Qty: <strong className="text-gray-700">{item.quantity}</strong></span>
+                                        </div>
+                                        {(item.productId || item.dealProductId) && (
+                                          <p className="font-mono text-[10px] text-gray-400 mt-1">ID: {(item.productId || item.dealProductId).slice(-10)}</p>
+                                        )}
+                                      </div>
+                                      <div className="text-right flex-shrink-0">
+                                        <p className="font-black text-sm text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                                        <p className="text-xs text-gray-400">₹{item.price.toLocaleString('en-IN')} each</p>
+                                        {mrp && mrp > item.price && (
+                                          <p className="text-[10px] text-gray-400 line-through">₹{mrp.toLocaleString('en-IN')}</p>
+                                        )}
                                       </div>
                                     </div>
-                                    <div className="text-right">
-                                      <p className="font-black text-sm text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                                      <p className="text-xs text-gray-400">₹{item.price.toLocaleString('en-IN')} each</p>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
 

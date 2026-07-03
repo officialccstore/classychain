@@ -137,6 +137,8 @@ model OrderItem {
   product       Product?  @relation(fields: [productId], references: [id])
   dealProductId String?
   itemName      String?
+  itemImage     String?
+  itemBrand     String?
   quantity      Int
   price         Float
   size          String?
