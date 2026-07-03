@@ -12,20 +12,17 @@ function isAdmin(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!isAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const cfg = await prisma.siteConfig.findUnique({ where: { key: 'dealOfTheDay' } })
-  return NextResponse.json({ deal: cfg ? JSON.parse(cfg.value) : null })
+  const enabled = cfg ? !!JSON.parse(cfg.value).enabled : false
+  return NextResponse.json({ enabled })
 }
 
 export async function POST(req: NextRequest) {
   if (!isAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { deal } = await req.json()
-  if (deal === null) {
-    await prisma.siteConfig.deleteMany({ where: { key: 'dealOfTheDay' } })
-    return NextResponse.json({ ok: true })
-  }
+  const { enabled } = await req.json()
   await prisma.siteConfig.upsert({
     where: { key: 'dealOfTheDay' },
-    update: { value: JSON.stringify(deal) },
-    create: { key: 'dealOfTheDay', value: JSON.stringify(deal) },
+    update: { value: JSON.stringify({ enabled: !!enabled }) },
+    create: { key: 'dealOfTheDay', value: JSON.stringify({ enabled: !!enabled }) },
   })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, enabled: !!enabled })
 }

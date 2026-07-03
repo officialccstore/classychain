@@ -111,6 +111,8 @@ export default function AdminPage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
   const [savingTrackingId, setSavingTrackingId] = useState<string | null>(null);
+  const [orderDateFrom, setOrderDateFrom] = useState('');
+  const [orderDateTo, setOrderDateTo] = useState('');
 
   // Analytics state
   const [analytics, setAnalytics] = useState<any>(null);
@@ -146,8 +148,7 @@ export default function AdminPage() {
   interface DealProductItem { id: string; name: string; description: string; category: string; sizeVariants: DealSizeVariant[]; image: string; images?: string[]; price?: number; isActive: boolean }
   const DEAL_CATEGORIES = ['Formal Shoes', 'Loafers', 'Boots', 'Sneakers', 'Casual', 'Slippers & Sandals', 'Peshawari & Mules'];
   const [dealItems, setDealItems] = useState<DealProductItem[]>([]);
-  const [dealStartDate, setDealStartDate] = useState('');
-  const [dealEndDate, setDealEndDate] = useState('');
+  const [dealEnabled, setDealEnabled] = useState(false);
   const [dealSaving, setDealSaving] = useState(false);
   const [dealSaveMsg, setDealSaveMsg] = useState('');
   const [dealForm, setDealForm] = useState({ name: '', description: '', category: 'Formal Shoes', sizeVariants: [] as DealSizeVariant[], image: '', image2: '', image3: '', price: '' });
@@ -268,10 +269,7 @@ export default function AdminPage() {
       ]);
       if (dealRes.ok) {
         const d = await dealRes.json();
-        if (d.deal) {
-          setDealStartDate(d.deal.startDate ? d.deal.startDate.slice(0, 16) : '');
-          setDealEndDate(d.deal.endDate ? d.deal.endDate.slice(0, 16) : '');
-        }
+        setDealEnabled(!!d.enabled);
       }
       if (itemsRes.ok) {
         const items = await itemsRes.json();
@@ -370,25 +368,20 @@ export default function AdminPage() {
     } catch {}
   };
 
-  const saveDeal = async () => {
-    if (!dealStartDate || !dealEndDate) { setDealSaveMsg('Set start and end dates.'); return; }
+  const toggleDealEnabled = async (next: boolean) => {
     setDealSaving(true); setDealSaveMsg('');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: { startDate: new Date(dealStartDate).toISOString(), endDate: new Date(dealEndDate).toISOString() } }) });
+      const res = await fetch('/api/admin/deal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ enabled: next }),
+      });
       if (!res.ok) throw new Error();
-      setDealSaveMsg('Deal window saved!');
+      setDealEnabled(next);
+      setDealSaveMsg(next ? 'Deal of the Day is now ON.' : 'Deal of the Day is now OFF.');
     } catch { setDealSaveMsg('Save failed.'); }
     finally { setDealSaving(false); setTimeout(() => setDealSaveMsg(''), 3000); }
-  };
-
-  const clearDeal = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      await fetch('/api/admin/deal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ deal: null }) });
-      setDealStartDate(''); setDealEndDate(''); setDealSaveMsg('Deal cleared.');
-      setTimeout(() => setDealSaveMsg(''), 3000);
-    } catch {}
   };
 
   const fetchShippingRate = async () => {
@@ -2084,21 +2077,60 @@ export default function AdminPage() {
             </div>
           )}
           {/* Orders Tab */}
-          {activeTab === 'orders' && (
+          {activeTab === 'orders' && (() => {
+            const filteredOrders = orders.filter((order) => {
+              if (!orderDateFrom && !orderDateTo) return true;
+              const orderDate = new Date(order.createdAt);
+              if (orderDateFrom && orderDate < new Date(`${orderDateFrom}T00:00:00`)) return false;
+              if (orderDateTo && orderDate > new Date(`${orderDateTo}T23:59:59.999`)) return false;
+              return true;
+            });
+            return (
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-sm text-gray-500">{orders.length} total order{orders.length !== 1 ? 's' : ''}</p>
-                <button onClick={fetchOrders} className="text-sm font-semibold text-gray-600 hover:text-black transition">↻ Refresh</button>
+              <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+                <p className="text-sm text-gray-500">
+                  {filteredOrders.length} of {orders.length} order{orders.length !== 1 ? 's' : ''}
+                  {(orderDateFrom || orderDateTo) && <span className="text-gray-400"> (filtered)</span>}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-gray-500">From</label>
+                    <input
+                      type="date"
+                      value={orderDateFrom}
+                      onChange={(e) => setOrderDateFrom(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-black transition"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-gray-500">To</label>
+                    <input
+                      type="date"
+                      value={orderDateTo}
+                      onChange={(e) => setOrderDateTo(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-black transition"
+                    />
+                  </div>
+                  {(orderDateFrom || orderDateTo) && (
+                    <button
+                      onClick={() => { setOrderDateFrom(''); setOrderDateTo(''); }}
+                      className="text-xs font-bold text-gray-500 hover:text-black border border-gray-200 rounded-lg px-2.5 py-1.5 transition"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button onClick={fetchOrders} className="text-sm font-semibold text-gray-600 hover:text-black transition">↻ Refresh</button>
+                </div>
               </div>
 
-              {orders.length === 0 ? (
+              {filteredOrders.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
                   <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 font-medium">No orders yet</p>
+                  <p className="text-gray-500 font-medium">{orders.length === 0 ? 'No orders yet' : 'No orders in this date range'}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {orders.map((order) => {
+                  {filteredOrders.map((order) => {
                     const statusColors: Record<string, string> = {
                       accepted: 'bg-blue-100 text-blue-700',
                       packaging: 'bg-amber-100 text-amber-700',
@@ -2306,7 +2338,8 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Settings Tab */}
           {activeTab === 'settings' && (
@@ -2850,41 +2883,27 @@ export default function AdminPage() {
               })()}
             </div>
 
-            {/* Deal Window */}
+            {/* Deal Schedule */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h2 className="text-base font-black text-black mb-1 flex items-center gap-2"><Clock className="w-4 h-4" /> Deal Window</h2>
-              <p className="text-xs text-gray-400 mb-5">The deal banner and products are only visible between these times</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Start Date &amp; Time</label>
-                  <input type="datetime-local" value={dealStartDate} onChange={e => setDealStartDate(e.target.value)} className={inputCls} />
-                  <p className="text-[10px] text-gray-400 mt-1">Default: 9:00 AM</p>
-                </div>
-                <div>
-                  <label className={labelCls}>End Date &amp; Time</label>
-                  <input type="datetime-local" value={dealEndDate} onChange={e => setDealEndDate(e.target.value)} className={inputCls} />
-                  <p className="text-[10px] text-gray-400 mt-1">Default: 9:00 PM</p>
-                </div>
-              </div>
-              <div className="flex gap-3 mt-4 justify-end">
-                {dealStartDate && (
-                  <button onClick={clearDeal} className={secondaryBtn}>
-                    <X className="w-4 h-4" /> Clear Window
-                  </button>
-                )}
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-base font-black text-black flex items-center gap-2"><Clock className="w-4 h-4" /> Deal of the Day Schedule</h2>
                 <button
-                  onClick={() => {
-                    if (!dealStartDate) { const t = new Date(); t.setHours(9, 0, 0, 0); setDealStartDate(t.toISOString().slice(0, 16)); }
-                    if (!dealEndDate) { const t = new Date(); t.setHours(21, 0, 0, 0); setDealEndDate(t.toISOString().slice(0, 16)); }
-                    saveDeal();
-                  }}
+                  type="button"
+                  role="switch"
+                  aria-checked={dealEnabled}
+                  onClick={() => toggleDealEnabled(!dealEnabled)}
                   disabled={dealSaving}
-                  className={primaryBtn}
+                  className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${dealEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
                 >
-                  {dealSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Flame className="w-4 h-4" />}
-                  Save Window
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${dealEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                 </button>
               </div>
+              <p className="text-xs text-gray-400">Runs automatically every day from 12:01 AM to 11:59 PM — no dates to set.</p>
+              <p className={`text-xs font-bold mt-3 ${dealEnabled ? 'text-green-600' : 'text-gray-400'}`}>
+                {dealEnabled
+                  ? '● ON — live on the homepage and /deals during the daily window.'
+                  : '○ OFF — hidden from the homepage and /deals, even by direct link.'}
+              </p>
             </div>
 
             {/* Shipping Rate */}

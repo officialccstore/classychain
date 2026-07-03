@@ -44,7 +44,7 @@ export default function RegisterPage() {
       localStorage.setItem('user', JSON.stringify(data.user))
       setSuccess(true)
       setTimeout(() => {
-        window.location.href = '/products'
+        window.location.href = '/'
       }, 2000)
     } catch (error) {
       setError('An error occurred. Please try again.')

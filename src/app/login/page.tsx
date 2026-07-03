@@ -66,7 +66,7 @@ export default function LoginPage() {
     try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
 
     const urlParams = new URL(window.location.href).searchParams
-    const redirect = urlParams.get('redirect') || urlParams.get('next') || (user.role === 'admin' ? '/admin' : '/products')
+    const redirect = urlParams.get('redirect') || urlParams.get('next') || (user.role === 'admin' ? '/admin' : '/')
     window.location.href = redirect
   }
 
