@@ -241,8 +241,10 @@ function CheckoutContent() {
   const subtotal = Array.isArray(cartItems)
     ? cartItems.reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0)
     : 0
+  const itemCount = Array.isArray(cartItems) ? cartItems.reduce((sum, item) => sum + item.quantity, 0) : 0
+  const shippingTotal = shippingRate * itemCount
   const discount = appliedCoupon ? subtotal * (appliedCoupon.percentage / 100) : 0
-  const total = subtotal - discount + shippingRate
+  const total = subtotal - discount + shippingTotal
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
@@ -660,9 +662,9 @@ function CheckoutContent() {
                   <span className="font-semibold text-gray-900">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Shipping</span>
-                  {shippingRate > 0 ? (
-                    <span className="font-semibold text-gray-900">₹{shippingRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  <span>Shipping{shippingRate > 0 ? ` (₹${shippingRate.toLocaleString('en-IN')} × ${itemCount})` : ''}</span>
+                  {shippingTotal > 0 ? (
+                    <span className="font-semibold text-gray-900">₹{shippingTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   ) : (
                     <span className="font-semibold text-green-600">FREE</span>
                   )}

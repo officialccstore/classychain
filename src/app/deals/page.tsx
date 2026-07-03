@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Flame, Clock, SlidersHorizontal, X } from 'lucide-react'
+import confetti from 'canvas-confetti'
 
 interface SizeVariant {
   size: string
@@ -56,15 +57,24 @@ function CountdownTimer({ endDate }: { endDate: string }) {
   const { h, m, s, expired } = useCountdown(endDate)
   if (expired) return <span className="text-red-500 font-bold text-sm">Deal expired</span>
   const pad = (n: number) => String(n).padStart(2, '0')
+  const units = [
+    { value: h, label: 'Hours' },
+    { value: m, label: 'Minutes' },
+    { value: s, label: 'Seconds' },
+  ]
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2.5">
       <Clock className="w-4 h-4 text-black/60" />
-      <div className="flex items-center gap-1 font-black text-black text-sm tabular-nums">
-        <span className="bg-black text-white px-2 py-0.5 rounded">{pad(h)}</span>
-        <span>:</span>
-        <span className="bg-black text-white px-2 py-0.5 rounded">{pad(m)}</span>
-        <span>:</span>
-        <span className="bg-black text-white px-2 py-0.5 rounded">{pad(s)}</span>
+      <div className="flex items-center gap-1.5">
+        {units.map((u, i) => (
+          <div key={u.label} className="flex items-center gap-1.5">
+            <div className="flex flex-col items-center">
+              <span className="bg-black text-white px-2 py-0.5 rounded font-black text-sm tabular-nums leading-tight">{pad(u.value)}</span>
+              <span className="text-[9px] font-bold text-black/50 uppercase tracking-wide mt-0.5">{u.label}</span>
+            </div>
+            {i < units.length - 1 && <span className="font-black text-black/40 -mt-3">:</span>}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -117,6 +127,22 @@ export default function DealsPage() {
       .catch(() => setDeal(null))
       .finally(() => setLoading(false))
   }, [])
+
+  // Party-poppers from both bottom corners the moment an active deal shows up
+  useEffect(() => {
+    if (!deal) return
+    let active = true
+    const colors = ['#fbbf24', '#111111', '#ffffff']
+    const endTime = Date.now() + 1500
+    const frame = () => {
+      if (!active) return
+      confetti({ particleCount: 3, angle: 60, spread: 55, startVelocity: 45, origin: { x: 0, y: 0.7 }, colors })
+      confetti({ particleCount: 3, angle: 120, spread: 55, startVelocity: 45, origin: { x: 1, y: 0.7 }, colors })
+      if (Date.now() < endTime) requestAnimationFrame(frame)
+    }
+    frame()
+    return () => { active = false }
+  }, [deal])
 
   const toggleSize = (size: string) => {
     setSelectedSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size])

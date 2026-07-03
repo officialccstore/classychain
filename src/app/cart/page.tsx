@@ -349,7 +349,9 @@ export default function CartPage() {
   }
 
   const subtotal = cartItems.reduce((s, it) => s + it.product.price * it.quantity, 0)
-  const total = subtotal + shippingRate
+  const itemCount = cartItems.reduce((s, it) => s + it.quantity, 0)
+  const shippingTotal = shippingRate * itemCount
+  const total = subtotal + shippingTotal
 
   const handleCheckout = () => {
     if (!isLoggedIn) { router.push('/login?next=/checkout'); return }
@@ -513,13 +515,13 @@ export default function CartPage() {
 
               <div className="space-y-3 text-sm mb-5">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal ({cartItems.reduce((s, i) => s + i.quantity, 0)} items)</span>
+                  <span>Subtotal ({itemCount} items)</span>
                   <span className="font-semibold text-gray-900">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Shipping</span>
-                  {shippingRate > 0 ? (
-                    <span className="font-semibold text-gray-900">₹{shippingRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  <span>Shipping{shippingRate > 0 ? ` (₹${shippingRate.toLocaleString('en-IN')} × ${itemCount})` : ''}</span>
+                  {shippingTotal > 0 ? (
+                    <span className="font-semibold text-gray-900">₹{shippingTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   ) : (
                     <span className="font-semibold text-green-600">FREE</span>
                   )}

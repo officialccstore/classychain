@@ -1,9 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Star, Truck, RefreshCw, Shield, Flame, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight, Star, Truck, RefreshCw, Shield, Flame, ChevronDown, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { LogoWithText } from "@/components/Logo";
+
+function useCountdown(endDate: string) {
+  const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0, expired: false });
+  useEffect(() => {
+    if (!endDate) return;
+    const calc = () => {
+      const diff = new Date(endDate).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft({ h: 0, m: 0, s: 0, expired: true }); return; }
+      setTimeLeft({ h: Math.floor(diff / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), expired: false });
+    };
+    calc();
+    const id = setInterval(calc, 1000);
+    return () => clearInterval(id);
+  }, [endDate]);
+  return timeLeft;
+}
+
+function DealCountdown({ endDate }: { endDate: string }) {
+  const { h, m, s, expired } = useCountdown(endDate);
+  if (!endDate || expired) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const units = [
+    { value: h, label: "Hours" },
+    { value: m, label: "Minutes" },
+    { value: s, label: "Seconds" },
+  ];
+  return (
+    <div className="flex items-center gap-2.5">
+      <Clock className="w-4 h-4 text-black/60" />
+      <div className="flex items-center gap-1.5">
+        {units.map((u, i) => (
+          <div key={u.label} className="flex items-center gap-1.5">
+            <div className="flex flex-col items-center">
+              <span className="bg-black text-white px-2 py-0.5 rounded font-black text-sm tabular-nums leading-tight">{pad(u.value)}</span>
+              <span className="text-[9px] font-bold text-black/50 uppercase tracking-wide mt-0.5">{u.label}</span>
+            </div>
+            {i < units.length - 1 && <span className="font-black text-black/40 -mt-3">:</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface Product {
   id: string;
@@ -29,6 +72,7 @@ export default function Home() {
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [dealActive, setDealActive] = useState(false);
+  const [dealEndDate, setDealEndDate] = useState('');
   const heroRef = useRef<HTMLElement>(null);
 
   // Parallax scroll listener — passive for performance
@@ -65,7 +109,10 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/deal")
       .then((r) => r.json())
-      .then((data) => setDealActive(!!data.deal))
+      .then((data) => {
+        setDealActive(!!data.deal);
+        setDealEndDate(data.deal?.endDate || '');
+      })
       .catch(() => {});
   }, []);
 
@@ -368,12 +415,15 @@ export default function Home() {
                   <p className="text-black/60 text-xs">Today only — don&apos;t let this one walk away</p>
                 </div>
               </div>
-              <Link
-                href="/deals"
-                className="inline-flex items-center gap-2 bg-black text-white px-6 py-2.5 font-black text-[11px] uppercase tracking-widest hover:bg-gray-900 transition whitespace-nowrap"
-              >
-                View Deals <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              <div className="flex items-center gap-4">
+                <DealCountdown endDate={dealEndDate} />
+                <Link
+                  href="/deals"
+                  className="inline-flex items-center gap-2 bg-black text-white px-6 py-2.5 font-black text-[11px] uppercase tracking-widest hover:bg-gray-900 transition whitespace-nowrap"
+                >
+                  View Deals <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
             </div>
           </section>
         )}
