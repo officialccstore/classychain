@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { signToken } from '@/lib/auth'
 
+const GOOGLE_SETUP_TOKEN_TTL = '15m'
+
 export async function POST(request: Request) {
   try {
     const { credential } = await request.json()
@@ -33,24 +35,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Could not get email from Google' }, { status: 400 })
     }
 
-    // Find or create user
-    let user = await prisma.user.findFirst({ where: { email } })
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email,
-          name: name || email.split('@')[0],
-        },
+    // Existing account (whether created via Google or otherwise) — log straight in.
+    const user = await prisma.user.findFirst({ where: { email } })
+    if (user) {
+      const token = signToken({ id: user.id, email: user.email, role: user.role })
+      return NextResponse.json({
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone },
+        token,
       })
     }
 
-    const token = signToken({ id: user.id, email: user.email, role: user.role })
-
-    return NextResponse.json({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone },
-      token,
-    })
+    // New Google user: don't create the account yet — every account needs a verified
+    // phone number for order/delivery flows, so send them through phone + OTP first.
+    const googleSetupToken = signToken({ email, name: name || email.split('@')[0], purpose: 'google-setup' }, GOOGLE_SETUP_TOKEN_TTL)
+    return NextResponse.json({ isNewUser: true, googleSetupToken, email, name: name || email.split('@')[0] })
   } catch (error) {
     console.error('Google auth error:', error)
     return NextResponse.json({ error: 'Google authentication failed' }, { status: 500 })

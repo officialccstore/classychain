@@ -67,6 +67,7 @@ function CheckoutContent() {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pinLookupLoading, setPinLookupLoading] = useState(false)
+  const [shippingRate, setShippingRate] = useState(0)
 
   const fetchPinData = async (pin: string) => {
     if (pin.length !== 6 || !/^\d{6}$/.test(pin)) return
@@ -85,6 +86,13 @@ function CheckoutContent() {
       setPinLookupLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetch('/api/shipping')
+      .then(r => r.ok ? r.json() : { amount: 0 })
+      .then(data => setShippingRate(Number(data.amount) || 0))
+      .catch(() => {})
+  }, [])
 
   // Load deal items immediately so loading=true doesn't hide them before the API call finishes
   useEffect(() => {
@@ -234,7 +242,7 @@ function CheckoutContent() {
     ? cartItems.reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0)
     : 0
   const discount = appliedCoupon ? subtotal * (appliedCoupon.percentage / 100) : 0
-  const total = subtotal - discount
+  const total = subtotal - discount + shippingRate
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
@@ -653,7 +661,11 @@ function CheckoutContent() {
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
-                  <span className="font-semibold text-green-600">FREE</span>
+                  {shippingRate > 0 ? (
+                    <span className="font-semibold text-gray-900">₹{shippingRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  ) : (
+                    <span className="font-semibold text-green-600">FREE</span>
+                  )}
                 </div>
                 {appliedCoupon && (
                   <div className="flex justify-between text-green-600">

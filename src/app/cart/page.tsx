@@ -129,7 +129,15 @@ export default function CartPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [showPhoneModal, setShowPhoneModal] = useState(false)
+  const [shippingRate, setShippingRate] = useState(0)
   const router = useRouter()
+
+  useEffect(() => {
+    fetch('/api/shipping')
+      .then(r => r.ok ? r.json() : { amount: 0 })
+      .then(data => setShippingRate(Number(data.amount) || 0))
+      .catch(() => {})
+  }, [])
 
   const getItemKey = (item: { productId: string; sizeVariantId?: string | null }) =>
     `${item.productId}-${item.sizeVariantId || 'na'}`
@@ -341,7 +349,7 @@ export default function CartPage() {
   }
 
   const subtotal = cartItems.reduce((s, it) => s + it.product.price * it.quantity, 0)
-  const total = subtotal
+  const total = subtotal + shippingRate
 
   const handleCheckout = () => {
     if (!isLoggedIn) { router.push('/login?next=/checkout'); return }
@@ -510,7 +518,11 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
-                  <span className="font-semibold text-green-600">FREE</span>
+                  {shippingRate > 0 ? (
+                    <span className="font-semibold text-gray-900">₹{shippingRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  ) : (
+                    <span className="font-semibold text-green-600">FREE</span>
+                  )}
                 </div>
               </div>
 

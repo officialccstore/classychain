@@ -23,6 +23,9 @@ export default function LoginPage() {
   const [setupToken, setSetupToken] = useState('')
   const [profileName, setProfileName] = useState('')
   const [profileEmail, setProfileEmail] = useState('')
+  const [googleSetupToken, setGoogleSetupToken] = useState('')
+  const [googleName, setGoogleName] = useState('')
+  const [googleEmail, setGoogleEmail] = useState('')
 
   const handleLoginSuccess = async (token: string, user: any) => {
     localStorage.setItem('token', token)
@@ -110,7 +113,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ phone, otp, ...(googleSetupToken ? { googleSetupToken } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Invalid OTP'); return }
@@ -119,7 +122,8 @@ export default function LoginPage() {
         setStep('profile')
         return
       }
-      showToast('Logged in successfully!', 'success', 2000)
+      showToast(googleSetupToken ? 'Account created! Welcome to ClassyChain.' : 'Logged in successfully!', 'success', 2000)
+      setGoogleSetupToken('')
       await handleLoginSuccess(data.token, data.user)
     } catch {
       setError('Network error. Please try again.')
@@ -152,6 +156,8 @@ export default function LoginPage() {
 
   const handleCompleteProfile = async () => {
     if (!profileName.trim()) { setError('Please enter your name'); return }
+    if (!profileEmail.trim()) { setError('Please enter your email'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileEmail.trim())) { setError('Enter a valid email address'); return }
     setLoading(true)
     setError('')
     try {
@@ -183,6 +189,14 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Google login failed'); return }
+      if (data.isNewUser) {
+        // New Google account: verify a phone number via OTP before creating it.
+        setGoogleSetupToken(data.googleSetupToken)
+        setGoogleName(data.name || '')
+        setGoogleEmail(data.email || '')
+        setStep('phone')
+        return
+      }
       showToast('Signed in with Google!', 'success', 3000)
       await handleLoginSuccess(data.token, data.user)
     } catch {
@@ -190,6 +204,16 @@ export default function LoginPage() {
     } finally {
       setGoogleLoading(false)
     }
+  }
+
+  const cancelGoogleSignup = () => {
+    setGoogleSetupToken('')
+    setGoogleName('')
+    setGoogleEmail('')
+    setStep('phone')
+    setPhone('')
+    setOtp('')
+    setError('')
   }
 
   const handleContinueAsGuest = () => {
@@ -212,8 +236,8 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Google Sign-In — hidden on profile setup step */}
-        {step !== 'profile' && (
+        {/* Google Sign-In — hidden on profile setup step and mid Google-signup phone verification */}
+        {step !== 'profile' && !googleSetupToken && (
           <>
             <div className={`mb-5 ${googleLoading ? 'opacity-60 pointer-events-none' : ''}`}>
               <GoogleLogin
@@ -233,6 +257,18 @@ export default function LoginPage() {
               <div className="flex-1 h-px bg-gray-200" />
             </div>
           </>
+        )}
+
+        {/* Continuing a Google signup: ask for + verify phone before creating the account */}
+        {googleSetupToken && step !== 'profile' && (
+          <div className="flex items-start justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-5">
+            <p className="text-xs text-amber-800 font-medium">
+              Signed in as <span className="font-bold">{googleName}</span> ({googleEmail}). Verify your mobile number to finish creating your account.
+            </p>
+            <button onClick={cancelGoogleSignup} className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap">
+              Cancel
+            </button>
+          </div>
         )}
 
         {/* Profile Setup (new users only) */}
@@ -258,7 +294,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                Email <span className="text-gray-400 font-normal">(optional)</span>
+                Email <span className="text-red-500">*</span>
               </label>
               <input
                 type="email"
@@ -271,7 +307,7 @@ export default function LoginPage() {
             </div>
             <button
               onClick={handleCompleteProfile}
-              disabled={loading || !profileName.trim()}
+              disabled={loading || !profileName.trim() || !profileEmail.trim()}
               className="w-full bg-black text-white py-2.5 rounded-lg font-bold text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
             >
               {loading ? (

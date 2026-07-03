@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import ImageUpload from '@/components/ImageUpload';
-import { Package, Tag, LayoutGrid, Ticket, ChevronDown, ChevronRight, Pencil, Trash2, Plus, AlertCircle, CheckCircle, X, ShoppingBag, BarChart2, TrendingUp, Users, IndianRupee, Settings, LogOut, UserPlus, Pencil as PencilIcon, Eye, EyeOff, Flame, Video, Clock, Search } from 'lucide-react';
+import { Package, Tag, LayoutGrid, Ticket, ChevronDown, ChevronRight, Pencil, Trash2, Plus, AlertCircle, CheckCircle, X, ShoppingBag, BarChart2, TrendingUp, Users, IndianRupee, Settings, LogOut, UserPlus, Pencil as PencilIcon, Eye, EyeOff, Flame, Video, Clock, Search, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -158,17 +158,33 @@ export default function AdminPage() {
   const [deletingDealItem, setDeletingDealItem] = useState<string | null>(null);
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [dealFormKey, setDealFormKey] = useState(0);
+  const [dealSearch, setDealSearch] = useState('');
+  const [shippingRate, setShippingRate] = useState('');
+  const [shippingRateSaving, setShippingRateSaving] = useState(false);
+  const [shippingRateSaveMsg, setShippingRateSaveMsg] = useState('');
+  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'unauthorized'>('checking');
 
-  // Load admin name on mount
+  // Gate the admin dashboard behind a logged-in admin — without this, the page
+  // rendered (and fired off admin-only API calls that 401'd) for anyone who visited it.
   useEffect(() => {
     try {
+      const token = localStorage.getItem('token');
       const userData = localStorage.getItem('user');
-      if (userData) setAdminName(JSON.parse(userData).name || '');
-    } catch {}
+      const user = userData ? JSON.parse(userData) : null;
+      if (token && user?.role === 'admin') {
+        setAdminName(user.name || '');
+        setAuthState('authorized');
+      } else {
+        setAuthState('unauthorized');
+      }
+    } catch {
+      setAuthState('unauthorized');
+    }
   }, []);
 
   // Fetch data
   useEffect(() => {
+    if (authState !== 'authorized') return;
     fetchCategories();
     fetchSubfamilies();
     if (activeTab === 'coupons') fetchCoupons();
@@ -176,18 +192,19 @@ export default function AdminPage() {
     if (activeTab === 'dashboard') fetchAnalytics();
     if (activeTab === 'homepage') fetchHomepageConfig();
     if (activeTab === 'reels') fetchReels();
-    if (activeTab === 'deals') fetchDeal();
+    if (activeTab === 'deals') { fetchDeal(); fetchShippingRate(); }
     if (activeTab === 'settings') {
       try {
         const userData = localStorage.getItem('user');
         if (userData) setAdminName(JSON.parse(userData).name || '');
       } catch {}
     }
-  }, [activeTab]);
+  }, [activeTab, authState]);
 
   useEffect(() => {
+    if (authState !== 'authorized') return;
     if (activeTab === 'products') fetchProducts();
-  }, [activeTab, page, selectedCategoryFilter, selectedSubcategoryFilter]);
+  }, [activeTab, page, selectedCategoryFilter, selectedSubcategoryFilter, authState]);
 
   const fetchHomepageConfig = async () => {
     const token = localStorage.getItem('token');
@@ -372,6 +389,38 @@ export default function AdminPage() {
       setDealStartDate(''); setDealEndDate(''); setDealSaveMsg('Deal cleared.');
       setTimeout(() => setDealSaveMsg(''), 3000);
     } catch {}
+  };
+
+  const fetchShippingRate = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/shipping', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (res.ok) {
+        const data = await res.json();
+        setShippingRate(data.amount ? String(data.amount) : '');
+      }
+    } catch {}
+  };
+
+  const saveShippingRate = async () => {
+    const parsed = Number(shippingRate);
+    if (shippingRate.trim() === '' || isNaN(parsed) || parsed < 0) {
+      setShippingRateSaveMsg('Enter a valid shipping amount.');
+      setTimeout(() => setShippingRateSaveMsg(''), 3000);
+      return;
+    }
+    setShippingRateSaving(true); setShippingRateSaveMsg('');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/shipping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ amount: parsed }),
+      });
+      if (!res.ok) throw new Error();
+      setShippingRateSaveMsg('Shipping rate saved!');
+    } catch { setShippingRateSaveMsg('Save failed.'); }
+    finally { setShippingRateSaving(false); setTimeout(() => setShippingRateSaveMsg(''), 3000); }
   };
 
   const saveHomepage = async (type: 'featured' | 'hero', ids: string[]) => {
@@ -1066,6 +1115,31 @@ export default function AdminPage() {
   const secondaryBtn = "inline-flex items-center gap-2 bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-lg font-semibold text-sm hover:border-gray-400 transition";
   const dangerBtn = "inline-flex items-center gap-1 text-red-500 hover:text-red-700 text-xs font-bold transition";
   const editBtn = "inline-flex items-center gap-1 text-gray-500 hover:text-black text-xs font-bold transition";
+
+  if (authState === 'checking') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  if (authState === 'unauthorized') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-lg p-8 text-center shadow-sm border border-gray-100 max-w-sm w-full">
+          <h1 className="text-2xl font-bold mb-4">Admin access required</h1>
+          <p className="text-gray-600 mb-6">You need to be logged in as an admin to view this page.</p>
+          <button
+            onClick={() => router.push('/login?redirect=/admin')}
+            className="inline-block bg-black text-white px-6 py-3 rounded-lg font-bold hover:bg-gray-800 transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -2673,11 +2747,27 @@ export default function AdminPage() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <h2 className="text-base font-black text-black mb-1">Deal Products ({dealItems.length})</h2>
               <p className="text-xs text-gray-400 mb-4">Toggle active/inactive to control what users see during the deal window</p>
+              {dealItems.length > 0 && (
+                <input
+                  type="text"
+                  placeholder="Search deal products by name or category…"
+                  value={dealSearch}
+                  onChange={e => setDealSearch(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-sm mb-4 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition"
+                />
+              )}
               {dealItems.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">No deal products yet — add one above</p>
-              ) : (
+              ) : (() => {
+                const q = dealSearch.trim().toLowerCase();
+                const filteredDealItems = q
+                  ? dealItems.filter(item => item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q))
+                  : dealItems;
+                return filteredDealItems.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">No deal products match "{dealSearch}"</p>
+                ) : (
                 <div className="space-y-3">
-                  {dealItems.map(item => (
+                  {filteredDealItems.map(item => (
                     <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl border transition ${item.isActive ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
                       {item.image && <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
@@ -2712,7 +2802,8 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Deal Window */}
@@ -2748,6 +2839,34 @@ export default function AdminPage() {
                 >
                   {dealSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Flame className="w-4 h-4" />}
                   Save Window
+                </button>
+              </div>
+            </div>
+
+            {/* Shipping Rate */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h2 className="text-base font-black text-black mb-1 flex items-center gap-2"><Truck className="w-4 h-4" /> Shipping Rate</h2>
+              <p className="text-xs text-gray-400 mb-5">This amount is charged as shipping on every order at checkout. Leave at 0 for free shipping.</p>
+              {shippingRateSaveMsg && (
+                <div className={`px-4 py-3 rounded-lg text-sm font-semibold mb-4 ${shippingRateSaveMsg.includes('failed') || shippingRateSaveMsg.includes('valid') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{shippingRateSaveMsg}</div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Shipping Amount (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={shippingRate}
+                    onChange={e => setShippingRate(e.target.value)}
+                    placeholder="e.g. 99"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <button onClick={saveShippingRate} disabled={shippingRateSaving} className={primaryBtn}>
+                  {shippingRateSaving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Truck className="w-4 h-4" />}
+                  Save Shipping Rate
                 </button>
               </div>
             </div>
