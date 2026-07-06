@@ -37,6 +37,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 })
     }
 
+    // The payment.captured webhook may have already recorded this order server-side
+    // (e.g. if this client call is arriving late after a dropped connection).
+    const existingOrder = await prisma.order.findFirst({ where: { paymentId: razorpay_payment_id } })
+    if (existingOrder) {
+      await prisma.cartItem.deleteMany({ where: { userId: auth.userId } })
+      return NextResponse.json({ success: true, orderId: existingOrder.id }, { status: 200 })
+    }
+
     const stockItems: StockCheckItem[] = items.map((item: any) => ({
       cartItemId: item.id,
       productId: item.productId || null,
@@ -83,8 +91,9 @@ export async function POST(request: Request) {
       throw err
     }
 
-    // Clear cart
+    // Clear cart and the pending-order snapshot created before payment
     await prisma.cartItem.deleteMany({ where: { userId: auth.userId } })
+    await prisma.pendingOrder.deleteMany({ where: { razorpayOrderId: razorpay_order_id } })
 
     // Fetch customer details for the email
     const user = await prisma.user.findUnique({

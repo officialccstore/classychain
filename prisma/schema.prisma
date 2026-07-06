@@ -230,6 +230,16 @@ model Coupon {
   updatedAt   DateTime @updatedAt
 }
 
+model PendingOrder {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  razorpayOrderId String   @unique
+  userId          String   @db.ObjectId
+  items           Json     // snapshot of cart items at the time payment was initiated
+  totalPrice      Float
+  shippingAddress String
+  createdAt       DateTime @default(now())
+}
+
 model OtpVerification {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   phone     String

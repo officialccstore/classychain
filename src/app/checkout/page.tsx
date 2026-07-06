@@ -374,7 +374,7 @@ function CheckoutContent() {
       const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ amount: total }),
+        body: JSON.stringify({ amount: total, items: cartItems, shippingAddress }),
       })
       const orderData = await orderRes.json()
       if (!orderRes.ok) throw new Error(orderData.error || 'Failed to initiate payment')
@@ -392,28 +392,37 @@ function CheckoutContent() {
         prefill: { name: shippingName.trim() || user?.name || '', email: user?.email || '', contact: shippingPhone.trim() || user?.phone || '' },
         theme: { color: '#000000' },
         handler: async (response: any) => {
-          const verifyRes = await fetch('/api/razorpay/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              items: cartItems,
-              total,
-              shippingAddress,
-            }),
-          })
-          const verifyData = await verifyRes.json()
-          if (verifyRes.ok && verifyData.success) {
-            try { localStorage.removeItem('dealCart') } catch {}
-            try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
-            router.push('/checkout?success=true')
-          } else if (verifyRes.status === 409 && Array.isArray(verifyData.issues)) {
-            setPlacing(false)
-            await removeOutOfStockItemsAndReturnToCart(verifyData.issues, token)
-          } else {
-            alert(verifyData.error || 'Payment verification failed. Please contact support.')
+          try {
+            const verifyRes = await fetch('/api/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                items: cartItems,
+                total,
+                shippingAddress,
+              }),
+            })
+            const verifyData = await verifyRes.json()
+            if (verifyRes.ok && verifyData.success) {
+              try { localStorage.removeItem('dealCart') } catch {}
+              try { window.dispatchEvent(new CustomEvent('cartUpdated')) } catch {}
+              router.push('/checkout?success=true')
+            } else if (verifyRes.status === 409 && Array.isArray(verifyData.issues)) {
+              setPlacing(false)
+              await removeOutOfStockItemsAndReturnToCart(verifyData.issues, token)
+            } else {
+              alert(verifyData.error || 'Payment verification failed. Please contact support.')
+              setPlacing(false)
+            }
+          } catch (err) {
+            // Payment already went through on Razorpay's side even if this call failed
+            // (network drop, app backgrounded, etc) — the payment.captured webhook records
+            // the order server-side as a fallback, so don't leave the user with no feedback.
+            console.error('Verify call failed after payment:', err)
+            alert('Payment received! We are confirming your order — check "My Orders" in a few minutes. Contact support if it does not appear.')
             setPlacing(false)
           }
         },

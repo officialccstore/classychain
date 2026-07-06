@@ -28,7 +28,10 @@
       "Bash(timeout 180 npx next build)",
       "Bash(command -v nvm)",
       "Read(//Users/mayankpratapsingh/.nvm/versions/node/**)",
-      "Bash(awk -F'=' '{print length\\($2\\)\" chars, ends with: \"substr\\($2,length\\($2\\)-20\\)}')"
+      "Bash(awk -F'=' '{print length\\($2\\)\" chars, ends with: \"substr\\($2,length\\($2\\)-20\\)}')",
+      "Bash(npx prisma *)",
+      "Bash(npx next *)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")"
     ],
     "additionalDirectories": [
       "/Users/mayankpratapsingh/Documents/classychain/src/app/api/admin/deal-products"

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
 import { verifyAuth } from '@/lib/auth'
+import prisma from '@/lib/prisma'
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { amount } = await request.json()
+    const { amount, items, shippingAddress } = await request.json()
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
@@ -25,6 +26,20 @@ export async function POST(request: Request) {
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
     })
+
+    // Snapshot the intended order so the webhook can build it server-side even if
+    // the client never comes back to call /verify (app killed, network drop, etc).
+    if (Array.isArray(items) && shippingAddress) {
+      await prisma.pendingOrder.create({
+        data: {
+          razorpayOrderId: order.id,
+          userId: auth.userId,
+          items,
+          totalPrice: amount,
+          shippingAddress,
+        },
+      })
+    }
 
     return NextResponse.json({ orderId: order.id, amount: order.amount, currency: order.currency })
   } catch (error) {
