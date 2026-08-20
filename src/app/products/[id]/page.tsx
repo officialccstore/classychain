@@ -665,11 +665,7 @@ export default function ProductDetailPage() {
                 <Link key={rp.id} href={`/products/${rp.id}`} className="group">
                   <div className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                     <div className="aspect-square overflow-hidden">
-                      {rp.image ? (
-                        <img src={rp.image} alt={rp.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-5xl bg-gray-100">👟</div>
-                      )}
+                      <img src={rp.image || '/placeholder-product.svg'} alt={rp.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     </div>
                     <div className="p-3">
                       <h3 className="text-sm font-bold text-gray-900 line-clamp-2 mb-1 group-hover:text-black">{rp.name}</h3>

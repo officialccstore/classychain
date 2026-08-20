@@ -485,9 +485,7 @@ function CheckoutContent() {
             <div className="divide-y divide-gray-50">
               {cartItems.map((item) => (
                 <div key={item.id} className="px-6 py-4 flex items-center gap-4">
-                  {item.product?.image && (
-                    <img src={item.product.image} alt={item.product.name} className="w-14 h-14 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
-                  )}
+                  <img src={item.product?.image || '/placeholder-product.svg'} alt={item.product?.name} className="w-14 h-14 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900 line-clamp-2">{item.product?.name}</p>
                     <div className="flex flex-wrap gap-2 mt-0.5">

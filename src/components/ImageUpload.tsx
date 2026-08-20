@@ -46,7 +46,7 @@ export default function ImageUpload({
       }
       reader.readAsDataURL(file)
 
-      // Upload to Cloudinary
+      // Upload to S3
       const formData = new FormData()
       formData.append('file', file)
 

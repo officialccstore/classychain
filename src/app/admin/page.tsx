@@ -1690,11 +1690,7 @@ export default function AdminPage() {
                         <div key={product.id} className={`flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition ${!product.isVisible ? 'opacity-50' : ''}`}>
                           {/* Thumbnail */}
                           <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-                            {product.image ? (
-                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-2xl">👟</div>
-                            )}
+                            <img src={product.image || '/placeholder-product.svg'} alt={product.name} className="w-full h-full object-cover" />
                           </div>
                           {/* Info */}
                           <div className="flex-1 min-w-0">
@@ -2544,11 +2540,7 @@ export default function AdminPage() {
                             </div>
                           )}
                           <div className="aspect-square bg-gray-50 overflow-hidden">
-                            {product.image ? (
-                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-300 font-black text-2xl">CC</div>
-                            )}
+                            <img src={product.image || '/placeholder-product.svg'} alt={product.name} className="w-full h-full object-cover" />
                           </div>
                           <div className="p-2.5">
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">{product.brand}</p>
@@ -2613,11 +2605,7 @@ export default function AdminPage() {
                             </div>
                           )}
                           <div className="aspect-square bg-gray-50 overflow-hidden">
-                            {product.image ? (
-                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-300 font-black text-2xl">CC</div>
-                            )}
+                            <img src={product.image || '/placeholder-product.svg'} alt={product.name} className="w-full h-full object-cover" />
                           </div>
                           <div className="p-2.5">
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">{product.brand}</p>
@@ -2903,7 +2891,7 @@ export default function AdminPage() {
                 <div className="space-y-3">
                   {pagedDealItems.map(item => (
                     <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl border transition ${item.isActive ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
-                      {item.image && <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />}
+                      <img src={item.image || '/placeholder-product.svg'} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-black text-gray-900 truncate">{item.name}</p>
                         <p className="text-xs text-gray-500">{item.category}{item.price ? ` · ₹${item.price.toLocaleString('en-IN')}` : ''}</p>

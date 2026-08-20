@@ -469,11 +469,7 @@ function ProductsPageContent() {
                       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-200 transition-all duration-300">
                         {/* Image */}
                         <div className="relative aspect-square bg-gray-50 overflow-hidden">
-                          {product.image ? (
-                            <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-6xl bg-gradient-to-br from-gray-100 to-gray-200 group-hover:scale-105 transition-transform duration-300">👟</div>
-                          )}
+                          <img src={product.image || '/placeholder-product.svg'} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                           {/* Badges */}
                           <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                             {isOutOfStock(product) ? (

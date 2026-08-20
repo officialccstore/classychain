@@ -503,17 +503,11 @@ export default function Home() {
                   <Link key={product.id} href={`/products/${product.id}`} className="group">
                     <div className="bg-white overflow-hidden">
                       <div className="aspect-square bg-gray-50 overflow-hidden relative">
-                        {product.image ? (
-                          <img
-                            src={product.image}
-                            alt={product.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-[#f0ede8]">
-                            <span className="font-black text-5xl" style={{ color: "rgba(0,0,0,0.08)" }}>CC</span>
-                          </div>
-                        )}
+                        <img
+                          src={product.image || '/placeholder-product.svg'}
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        />
                         {product.mrp && product.mrp > product.price && (
                           <span className="absolute top-3 left-3 bg-black text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-wider">
                             -{Math.round(((product.mrp - product.price) / product.mrp) * 100)}%

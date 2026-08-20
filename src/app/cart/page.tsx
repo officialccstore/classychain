@@ -426,11 +426,7 @@ export default function CartPage() {
                 {/* Image */}
                 <Link href={item.isDeal ? `/deals/${item.dealProductId}` : `/products/${item.productId}`} className="flex-shrink-0">
                   <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-100 rounded-lg overflow-hidden">
-                    {item.product.image ? (
-                      <img src={item.product.image} alt={item.product.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-3xl">👟</div>
-                    )}
+                    <img src={item.product.image || '/placeholder-product.svg'} alt={item.product.name} className="w-full h-full object-cover" />
                   </div>
                 </Link>
 

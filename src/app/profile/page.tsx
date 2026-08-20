@@ -425,9 +425,7 @@ export default function ProfilePage() {
                           <div className="space-y-3">
                             {order.items.map((item) => (
                               <div key={item.id} className="flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-100">
-                                {item.product?.image && (
-                                  <img src={item.product.image} alt={item.product.name} className="w-14 h-14 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
-                                )}
+                                <img src={item.product?.image || '/placeholder-product.svg'} alt={item.product?.name || 'Product'} className="w-14 h-14 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold text-gray-900 text-sm">{item.product?.name || 'Product'}</p>
                                   <div className="flex flex-wrap gap-2 mt-1">

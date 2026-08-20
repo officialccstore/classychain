@@ -87,7 +87,7 @@ function ProductCard({ product }: { product: DealProduct }) {
     <Link href={`/deals/${product.id}`} className="group">
       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-200 transition-all duration-300">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
-          <img src={product.image} alt={product.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`} />
+          <img src={product.image || '/placeholder-product.svg'} alt={product.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`} />
           <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
             {outOfStock ? (
               <span title="You just missed it — out of stock" className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Sold Out</span>

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { v2 as cloudinary } from 'cloudinary'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { randomUUID } from 'crypto'
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
 })
+
+const BUCKET = process.env.AWS_S3_BUCKET_NAME!
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,21 +21,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Convert file to base64
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
-    const base64 = buffer.toString('base64')
-    const dataURI = `data:${file.type};base64,${base64}`
+    const extension = file.name.split('.').pop()
+    const key = `classychain/products/${randomUUID()}${extension ? `.${extension}` : ''}`
 
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: 'classychain/products',
-      resource_type: 'auto',
-    })
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: file.type,
+      })
+    )
+
+    const publicUrl = process.env.AWS_S3_PUBLIC_URL
+      ? `${process.env.AWS_S3_PUBLIC_URL.replace(/\/$/, '')}/${key}`
+      : `https://${BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
 
     return NextResponse.json({
-      url: result.secure_url,
-      publicId: result.public_id,
+      url: publicUrl,
+      publicId: key,
     })
   } catch (error) {
     console.error('Upload error:', error)

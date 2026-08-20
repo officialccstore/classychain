@@ -12,7 +12,7 @@ export default function TestUploadPage() {
         <div className="bg-white rounded-xl shadow-lg p-8">
           <h1 className="text-3xl font-bold mb-2">Image Upload Test</h1>
           <p className="text-gray-600 mb-8">
-            Test Cloudinary image upload functionality
+            Test S3 image upload functionality
           </p>
 
           <ImageUpload
@@ -29,7 +29,7 @@ export default function TestUploadPage() {
                 ✅ Upload Successful!
               </h3>
               <p className="text-sm text-gray-700 mb-2">
-                Your image has been uploaded to Cloudinary
+                Your image has been uploaded to S3
               </p>
               <div className="bg-white p-3 rounded border border-green-200">
                 <p className="text-xs text-gray-600 mb-1 font-semibold">
